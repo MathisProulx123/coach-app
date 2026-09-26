@@ -1,12 +1,14 @@
 import * as db from './db.js';
 import { CONFIG } from './config.js';
 import { esc, today, mondayOf, addDays, fmtDate, round1, avg, resizeImage } from './util.js';
-import { EXERCISES, buildProgram } from './data.js';
-import { calcTargets, weeklyAdjust, nextTarget } from './rules.js';
+import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
+import { calcTargets, weeklyAdjust, nextTarget, extraTargets } from './rules.js';
+import { ALLERGENS, DIETS } from './foods.js';
+import { buildChoices, rerollMeal, equivalents, swapItem, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 
 const S = {
   me: null, profile: null, plan: null, workouts: [], daily: [], checkins: [], other: null,
-  view: 'home', dayIdx: null, who: 'me', slot: 'front', authMode: 'in',
+  view: 'home', dayIdx: null, who: 'me', slot: 'front', authMode: 'in', editPrefs: false, chatBusy: false,
 };
 const root = document.getElementById('app');
 const acts = {};   // actions déclenchées par un clic : data-act="nom"
@@ -20,6 +22,7 @@ async function loadMine() {
   [S.plan, S.workouts, S.daily, S.checkins] = await Promise.all([
     db.getPlan(id), db.listWorkouts(id), db.listDaily(id), db.listCheckins(id),
   ]);
+  await ensureMealPlan();
 }
 async function loadOther() {
   const others = (await db.listProfiles()).filter((p) => p.id !== S.me.id);
@@ -30,6 +33,24 @@ async function loadOther() {
   ]);
   S.other = { profile: p, plan, workouts, daily, checkins };
 }
+// Enregistre une nouvelle version du plan en reprenant l'actuel + les changements
+async function savePlan(changes = {}) {
+  const b = S.plan;
+  await db.savePlan({
+    user_id: S.me.id, calories: b.calories, protein: b.protein, carbs: b.carbs, fat: b.fat, program: b.program,
+    deload: b.deload, hold: b.hold, reasons: b.reasons || [], meal_plan: b.meal_plan ?? null, ...changes,
+  });
+}
+// Crée le plan de repas dès que les préférences alimentaires sont remplies
+async function ensureMealPlan() {
+  const pr = prefs();
+  if (!S.plan || !pr.done) return;
+  if (!S.plan.meal_plan || S.plan.meal_plan.meals.length !== pr.meals) {
+    await savePlan({ meal_plan: buildChoices(pr, Date.now(), S.plan) });
+    S.plan = await db.getPlan(S.me.id);
+  }
+}
+const prefs = () => ({ allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, ...(S.profile?.food_prefs || {}) });
 
 // ================= Petits helpers d'affichage =================
 function toast(msg) {
@@ -37,11 +58,13 @@ function toast(msg) {
   t.className = 'toast';
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2800);
+  setTimeout(() => t.remove(), 3200);
 }
 const bar = (v, t) => `<div class="bar"><i style="width:${Math.min(100, t ? (v / t) * 100 : 0)}%"></i></div>`;
 const GOALS = { lose: 'Perdre du gras', maintain: 'Maintenir', gain: 'Prendre du muscle' };
 const LEVEL5 = ['1 · Très bas', '2 · Bas', '3 · Correct', '4 · Bon', '5 · Excellent'];
+const thumb = (id) => `<img class="thumb" loading="lazy" src="${imgUrl(id, 0)}" data-fb="${imgFallback(id, 0)}" alt="">`;
+const m1 = (n) => Math.round(n);
 
 function lineChart(points) {
   if (points.length < 2) return '<p class="muted">Pas encore assez de données (2 check-ins minimum).</p>';
@@ -91,6 +114,24 @@ function statsOf(d) {
     total: d.workouts.length, week: d.workouts.filter((x) => x.date >= wk).length, checkins: d.checkins.length,
   };
 }
+const macroLine = (m) => `${m1(m.k)} kcal · P ${m1(m.p)} g · G ${m1(m.c)} g · L ${m1(m.f)} g`;
+
+// ================= Fenêtre du bas (photos d'exercice, échanges d'aliments…) =================
+const sheetEl = document.createElement('div');
+sheetEl.id = 'sheet';
+sheetEl.hidden = true;
+document.body.appendChild(sheetEl);
+function openSheet(html) {
+  sheetEl.innerHTML = `<div class="backdrop" data-act="closeSheet"></div><div class="panel">${html}</div>`;
+  sheetEl.hidden = false;
+  document.body.classList.add('noscroll');
+}
+function closeSheet() {
+  sheetEl.hidden = true;
+  sheetEl.innerHTML = '';
+  document.body.classList.remove('noscroll');
+}
+acts.closeSheet = closeSheet;
 
 // ================= Écrans =================
 function vHome() {
@@ -119,7 +160,9 @@ function vHome() {
     <h2>Nutrition aujourd’hui</h2>
     <div class="row between"><span>Calories</span><span>${log.calories || 0} / ${plan.calories} kcal</span></div>${bar(log.calories || 0, plan.calories)}
     <div class="row between"><span>Protéines</span><span>${log.protein || 0} / ${plan.protein} g</span></div>${bar(log.protein || 0, plan.protein)}
-    <a class="btn ghost block" href="#/food">Noter ma journée</a>
+    ${prefs().done
+      ? '<a class="btn ghost block" href="#/food">Voir mes repas</a>'
+      : '<a class="btn block" href="#/food">Créer mon plan de repas (2 min)</a>'}
   </section>
   ${msgs.length ? `<section class="card"><h2>Le coach</h2>${msgs.map((m) => `<div class="msg"><span>${m.icon}</span><span>${esc(m.text)}</span></div>`).join('')}</section>` : ''}
   <section class="card">
@@ -144,14 +187,18 @@ function vTrain() {
   ${S.plan.deload ? '<div class="card"><span class="pill">Semaine légère</span> Moins de séries et charges réduites pour bien récupérer.</div>' : ''}
   <form data-form="workout" data-day="${idx}" class="card">
     <h2>${esc(day.label)}</h2>
+    <p class="muted">Touche un exercice pour voir la position de départ et d’arrivée, ou pour le remplacer.</p>
     ${day.exercises.map((ex, i) => {
       const def = EXERCISES[ex.id];
       const last = lastSets(ex.id);
       const t = nextTarget(def, ex, last, { deload: S.plan.deload, hold: S.plan.hold });
       const unit = def.time ? 's' : 'reps';
       return `<div class="ex">
-        <h3>${esc(def.name)}</h3>
-        <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${t.w} kg` : ''}</div>
+        <div class="row tap" data-act="exInfo" data-arg="${ex.id}" role="button" tabindex="0" aria-label="Voir l’exercice ${esc(def.name)}">
+          ${thumb(ex.id)}
+          <div style="flex:1"><h3>${esc(def.name)} <span class="muted">ⓘ</span></h3>
+          <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${t.w} kg` : ''}</div></div>
+        </div>
         <div class="muted">${esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${s.w || 0}×${s.r}`).join(', ')}.` : ''}</div>
         <div class="sets">${Array.from({ length: t.sets }, (_, s) => `
           <span class="muted">${s + 1}</span>
@@ -166,10 +213,81 @@ function vTrain() {
   </section>`;
 }
 
+// ----- Fiche d'un exercice (photos avant / après, consigne, variantes) -----
+function exInfoHtml(id) {
+  const ex = EXERCISES[id];
+  const fig = (n, label) => `<figure><img src="${imgUrl(id, n)}" data-fb="${imgFallback(id, n)}" alt="${label} : ${esc(ex.name)}"><figcaption>${label}</figcaption></figure>`;
+  return `
+    <div class="row between"><h2>${esc(ex.name)}</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <div class="photos one">${fig(0, 'Départ')}${fig(1, 'Arrivée')}</div>
+    <p>${esc(ex.cue)}</p>
+    <button class="ghost block" data-act="exAlts" data-arg="${id}">Je ne peux pas / n’aime pas cet exercice : voir les variantes</button>
+    <p class="muted">Photos : Free Exercise DB (domaine public).</p>`;
+}
+acts.exInfo = (el) => openSheet(exInfoHtml(el.dataset.arg));
+function exclusionFor(id) {
+  return S.plan.program.filter((d) => d.exercises.some((e) => e.id === id)).flatMap((d) => d.exercises.map((e) => e.id));
+}
+acts.exAlts = (el) => {
+  const id = el.dataset.arg;
+  const alts = altsFor(id, S.profile.equipment, exclusionFor(id));
+  openSheet(`
+    <div class="row between"><h2>Variantes</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <p class="muted">Remplace <b>${esc(EXERCISES[id].name)}</b> partout dans ton programme par un exercice qui travaille les mêmes muscles.</p>
+    ${alts.length ? alts.map((a) => `
+      <div class="alt">
+        ${thumb(a)}
+        <div style="flex:1"><b>${esc(EXERCISES[a].name)}</b><div class="muted">${esc(EXERCISES[a].cue)}</div></div>
+        <button class="small" data-act="exSwap" data-arg="${id}" data-new="${a}">Choisir</button>
+      </div>`).join('') : '<p>Aucune variante disponible avec ton matériel. Demande au coach IA une idée.</p>'}
+    <button class="ghost block" data-act="exInfo" data-arg="${id}">Retour</button>`);
+};
+acts.exSwap = async (el) => {
+  const oldId = el.dataset.arg, newId = el.dataset.new;
+  const od = EXERCISES[oldId], nw = EXERCISES[newId];
+  const program = S.plan.program.map((day) => ({
+    ...day,
+    exercises: day.exercises.map((e) => {
+      if (e.id !== oldId) return e;
+      let { lo, hi } = e;
+      if (nw.time && !od.time) { lo = 30; hi = 60; } else if (!nw.time && od.time) { lo = 10; hi = 20; }
+      return { ...e, id: newId, lo, hi };
+    }),
+  }));
+  try {
+    await savePlan({ program });
+    closeSheet();
+    toast(`${od.name} → ${nw.name}`);
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+
+// ----- Onglet Repas -----
+function foodPrefsForm(pr, first) {
+  return `
+  <form data-form="food" class="card">
+    <h2>${first ? 'Ton plan de repas' : 'Mes préférences alimentaires'}</h2>
+    <p class="muted">Réponds à ces questions pour que je crée des repas qui te conviennent. Tu pourras les changer à tout moment.</p>
+    <label>Allergies ou intolérances</label>
+    <div class="checks">${Object.entries(ALLERGENS).map(([k, v]) => `<label class="check"><input type="checkbox" name="allergy" value="${k}" ${pr.allergies.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+    <label>Régime</label>
+    <select name="diet">${Object.entries(DIETS).map(([k, v]) => `<option value="${k}" ${pr.diet === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <label>Aliments que tu n’aimes pas ou veux éviter (séparés par des virgules)</label>
+    <textarea name="dislikes" rows="2" placeholder="ex. saumon, brocoli, thon">${esc(pr.dislikes)}</textarea>
+    <label>Repas par jour</label>
+    <select name="meals">${[3, 4, 5].map((n) => `<option value="${n}" ${pr.meals === n ? 'selected' : ''}>${n} repas${n === 3 ? '' : n === 4 ? ' (dont 1 collation)' : ' (dont 2 collations)'}</option>`).join('')}</select>
+    <button class="block" style="margin-top:14px">${first ? 'Créer mon plan de repas' : 'Enregistrer et régénérer mes repas'}</button>
+    ${first ? '' : '<button type="button" class="ghost block" style="margin-top:8px" data-act="cancelPrefs">Annuler</button>'}
+  </form>`;
+}
+
 function vFood() {
-  const pl = S.plan;
+  const pl = S.plan, pr = prefs();
   const log = S.daily.find((d) => d.date === today()) || {};
-  const meals = +(localStorage.getItem('meals') || 4);
+  if (!pr.done) return foodPrefsForm(pr, true);
+  if (S.editPrefs) return foodPrefsForm(pr, false);
+  const cd = computeDay(pl, pl.meal_plan, pr);
+  const ex = extraTargets(pl.calories, lastWeight());
   const week = S.daily.filter((d) => d.date >= addDays(today(), -6));
   const wAvg = avg(week.filter((d) => d.calories).map((d) => d.calories));
   return `
@@ -179,11 +297,39 @@ function vFood() {
       <div class="stat"><b>${pl.calories}</b><span>kcal</span></div><div class="stat"><b>${pl.protein}</b><span>protéines g</span></div>
       <div class="stat"><b>${pl.carbs}</b><span>glucides g</span></div><div class="stat"><b>${pl.fat}</b><span>lipides g</span></div>
     </div>
-    <p class="muted">Ces cibles s’ajustent chaque semaine selon ton check-in.</p>
-    <h3>Répartition</h3>
-    <label>Nombre de repas par jour</label>
-    <select data-act="setMeals">${[3, 4, 5, 6].map((n) => `<option ${n === meals ? 'selected' : ''}>${n}</option>`).join('')}</select>
-    <p>≈ <b>${Math.round(pl.calories / meals)} kcal</b> et <b>${Math.round(pl.protein / meals)} g de protéines</b> par repas.</p>
+    <div class="grid3" style="margin-top:10px">
+      <div class="stat"><b>≥ ${ex.fibre} g</b><span>fibres</span></div><div class="stat"><b>≈ ${String(ex.eau).replace('.', ',')} L</b><span>eau</span></div>
+      <div class="stat"><b>≤ ${ex.satfat} g</b><span>gras saturés</span></div>
+    </div>
+    <p class="muted">Le coach ajuste ces cibles chaque semaine selon ton check-in.</p>
+    <button class="ghost block" data-act="editTargets">Modifier mes cibles</button>
+  </section>
+  <p class="muted">Quantités en aliments cuits, sauf indication. Les marques sont des exemples courants et les valeurs sont des moyennes : vérifie l’étiquette de ta marque.</p>
+  ${cd.meals.map((m, si) => `
+    <section class="card">
+      <div class="row between"><h2>${SLOT_NAMES[m.slot]}</h2><span class="muted">${m1(m.totals.k)} kcal · ${m1(m.totals.p)} g prot.</span></div>
+      ${m.items.map((it, ii) => it.g <= 0 ? '' : `
+        <div class="food">
+          <div style="flex:1">
+            <b>${qtyText(it)}</b> ${esc(it.food.name)}${it.extra ? ' <span class="pill">complément</span>' : ''}
+            <div class="muted">P ${m1(it.macros.p)} · G ${m1(it.macros.c)} · L ${m1(it.macros.f)} · ${m1(it.macros.k)} kcal</div>
+            <div class="muted">Marques : ${esc(it.food.brands)}</div>
+          </div>
+          ${it.extra ? '' : `<button type="button" class="ghost small" data-act="swapFood" data-slot="${si}" data-item="${ii}" aria-label="Remplacer ${esc(it.food.name)}">↔</button>`}
+        </div>`).join('')}
+      <button type="button" class="ghost block" style="margin-top:8px" data-act="reroll" data-slot="${si}">Autre repas</button>
+    </section>`).join('')}
+  <section class="card">
+    <h2>Total du plan</h2>
+    <div class="row between"><span>Calories</span><span>${m1(cd.totals.k)} / ${pl.calories}</span></div>${bar(cd.totals.k, pl.calories)}
+    <div class="row between"><span>Protéines</span><span>${m1(cd.totals.p)} / ${pl.protein} g</span></div>${bar(cd.totals.p, pl.protein)}
+    <div class="row between"><span>Glucides</span><span>${m1(cd.totals.c)} / ${pl.carbs} g</span></div>${bar(cd.totals.c, pl.carbs)}
+    <div class="row between"><span>Lipides</span><span>${m1(cd.totals.f)} / ${pl.fat} g</span></div>${bar(cd.totals.f, pl.fat)}
+    <p class="muted">Les quantités sont arrondies à des portions pratiques et se recalculent quand tes cibles changent.</p>
+    <div class="grid2">
+      <button class="ghost" data-act="grocery">Liste d’épicerie</button>
+      <button class="ghost" data-act="showPrefs">Mes préférences</button>
+    </div>
   </section>
   <form data-form="daily" class="card">
     <h2>Journal du jour</h2>
@@ -192,14 +338,58 @@ function vFood() {
     <label>Protéines (g)</label><input name="protein" type="number" inputmode="numeric" value="${log.protein ?? ''}">
     <button class="block" style="margin-top:12px">Enregistrer</button>
     ${wAvg ? `<p class="muted">Moyenne des 7 derniers jours : ${Math.round(wAvg)} kcal (cible ${pl.calories}).</p>` : ''}
-  </form>
-  <section class="card">
-    <h2>Idées simples</h2>
-    <p><b>Assiette type :</b> une source de protéines (grosseur de la paume), un féculent, 1–2 légumes, un pouce de gras.</p>
-    <p class="muted">Protéines : œufs, yogourt grec, fromage cottage, poulet, dinde, poisson, thon, tofu, poudre de protéines.<br>
-    Féculents : riz, pommes de terre, pâtes, avoine, pain, fruits.</p>
-  </section>`;
+  </form>`;
 }
+
+acts.showPrefs = () => { S.editPrefs = true; render(); window.scrollTo(0, 0); };
+acts.cancelPrefs = () => { S.editPrefs = false; render(); };
+acts.swapFood = (el) => {
+  const si = +el.dataset.slot, ii = +el.dataset.item;
+  const pl = S.plan, pr = prefs();
+  const it = pl.meal_plan.meals[si].items[ii];
+  const cur = computeDay(pl, pl.meal_plan, pr).meals[si].items[ii];
+  const eq = equivalents(pl.meal_plan, si, ii, pr);
+  openSheet(`
+    <div class="row between"><h2>Remplacer</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <p class="muted">${ROLE_NAMES[it.role]} du ${SLOT_NAMES[pl.meal_plan.meals[si].slot].toLowerCase()} : <b>${esc(cur.food.name)}</b>. La quantité et le reste du repas se recalculent automatiquement.</p>
+    ${eq.length ? eq.map((f) => `
+      <div class="alt">
+        <div style="flex:1"><b>${esc(f.name)}</b><div class="muted">Marques : ${esc(f.brands)}</div></div>
+        <button class="small" data-act="pickFood" data-slot="${si}" data-item="${ii}" data-food="${f.id}">Choisir</button>
+      </div>`).join('') : '<p>Aucun autre aliment ne convient à tes restrictions pour ce repas. Essaie « Autre repas » ou change tes préférences.</p>'}`);
+};
+acts.pickFood = async (el) => {
+  try {
+    await savePlan({ meal_plan: swapItem(S.plan.meal_plan, +el.dataset.slot, +el.dataset.item, el.dataset.food) });
+    closeSheet();
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+acts.reroll = async (el) => {
+  try {
+    await savePlan({ meal_plan: rerollMeal(S.plan.meal_plan, +el.dataset.slot, prefs(), S.plan) });
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+acts.grocery = () => {
+  const list = groceryList(computeDay(S.plan, S.plan.meal_plan, prefs()), 7);
+  openSheet(`
+    <div class="row between"><h2>Épicerie (7 jours)</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <p class="muted">Quantités pour une semaine de ton plan actuel.</p>
+    ${list.map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">Marques : ${esc(g.brands)}</div></div></div>`).join('')}`);
+};
+acts.editTargets = () => {
+  const p = S.plan;
+  openSheet(`
+    <div class="row between"><h2>Modifier mes cibles</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <p class="muted">Les glucides se calculent automatiquement avec le reste. Le coach repartira de ces valeurs au prochain check-in.</p>
+    <form data-form="targets">
+      <label>Calories (kcal)</label><input name="calories" type="number" min="1000" max="6000" required value="${p.calories}">
+      <label>Protéines (g)</label><input name="protein" type="number" min="40" max="400" required value="${p.protein}">
+      <label>Lipides (g)</label><input name="fat" type="number" min="20" max="250" required value="${p.fat}">
+      <button class="block" style="margin-top:12px">Enregistrer</button>
+    </form>`);
+};
 
 function vCheckin() {
   const wk = mondayOf();
@@ -217,7 +407,7 @@ function vCheckin() {
       <div class="stat"><b>${pl.carbs}</b><span>gluc. g</span></div><div class="stat"><b>${pl.fat}</b><span>lip. g</span></div></div>
       ${pl.deload ? '<p><span class="pill">Semaine légère</span></p>' : ''}
     </section>
-    ${CONFIG.AI_ENABLED ? `<section class="card"><h2>Avis du coach IA</h2>${cur.coach?.ai ? `<p>${esc(cur.coach.ai)}</p>` : '<p class="muted">Un commentaire personnalisé sur ta semaine.</p><button class="block" data-act="askAI">Demander un avis</button>'}</section>`
+    ${canAI() ? `<section class="card"><h2>Avis du coach IA</h2>${cur.coach?.ai ? `<p>${esc(cur.coach.ai)}</p>` : '<p class="muted">Un commentaire personnalisé sur ta semaine.</p><button class="block" data-act="askAI">Demander un avis</button>'}</section>`
       : ''}`;
   }
   const wkDaily = S.daily.filter((d) => d.date >= wk && d.weight).map((d) => d.weight);
@@ -283,6 +473,104 @@ function vProgress() {
   </section>`;
 }
 
+// ----- Onglet Coach IA -----
+const canAI = () => CONFIG.AI_ENABLED && !db.DEMO;
+const chatKey = () => `coach_chat_${S.me.id}`;
+function chatLoad() { try { return JSON.parse(localStorage.getItem(chatKey()) || '[]'); } catch { return []; } }
+function chatSave(h) { try { localStorage.setItem(chatKey(), JSON.stringify(h.slice(-40))); } catch { /* stockage indisponible */ } }
+
+const CHIPS = [
+  'Comment remplacer un exercice que je ne peux pas faire ?',
+  'Comment changer un aliment de mon plan ?',
+  'Pourquoi mes calories ont changé ?',
+  'Comment modifier mes cibles moi-même ?',
+];
+
+function faq(q) {
+  const t = q.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const has = (...w) => w.some((x) => t.includes(x));
+  if (has('exercice', 'variante', 'remplac') && has('exercice', 'seance', 'douleur', 'mal', 'blessure', 'faire')) {
+    return 'Dans l’onglet Séance, touche le nom d’un exercice : tu vois la photo de départ et d’arrivée. En bas de la fiche, « voir les variantes » propose des remplacements qui travaillent les mêmes muscles. Le choix remplace l’exercice partout dans ton programme. En cas de douleur, arrête l’exercice et consulte un professionnel.';
+  }
+  if (has('aliment', 'repas', 'manger', 'allerg', 'aime pas', 'remplac')) {
+    return 'Onglet Repas : le bouton ↔ à côté d’un aliment propose des équivalents (la quantité se recalcule), et « Autre repas » régénère un repas complet. Pour les allergies, le régime ou les aliments que tu n’aimes pas, ouvre « Mes préférences » en bas de l’onglet : le plan est refait selon ces règles.';
+  }
+  if (has('calorie', 'macro', 'cible', 'proteine', 'glucide', 'lipide')) {
+    return 'Tes cibles sont en haut de l’onglet Repas. Le coach les ajuste chaque semaine selon l’évolution de ton poids (± 150 kcal). Pour les changer toi-même, touche « Modifier mes cibles » : le coach repartira de tes chiffres au prochain check-in.';
+  }
+  if (has('check', 'semaine', 'ajust', 'poids', 'stagn')) {
+    return 'Chaque semaine, le check-in enregistre ton poids, ton sommeil, ton énergie et tes séances. Le coach compare ton poids à la semaine précédente : trop lent ou trop rapide, il ajuste les calories ; s’il te sent fatigué, il propose une semaine légère ; si tu as bien fait tes séances, les charges montent. Le premier check-in sert seulement de point de départ.';
+  }
+  if (has('photo')) {
+    return 'Les photos se prennent dans le check-in (face, profil, dos). Tu les compares ensuite dans l’onglet Progrès, avec la première photo et la plus récente côte à côte.';
+  }
+  if (has('charge', 'poids', 'kg', 'progress')) {
+    return 'Quand toutes tes séries atteignent le haut de la fourchette de répétitions, l’objectif de charge monte à la séance suivante (+2,5 kg haut du corps, +5 kg bas du corps). Il est affiché sur chaque exercice.';
+  }
+  return 'Je peux répondre aux questions sur l’application (exercices, repas, cibles, check-in). Pour un coaching plus personnalisé, il faut activer le coach IA (voir le README, section « Avis IA »). Note ton idée et on l’ajoutera à l’application.';
+}
+
+function aiContext() {
+  const p = S.profile, pl = S.plan, pr = prefs();
+  const meals = pl.meal_plan ? computeDay(pl, pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
+  return {
+    profil: { objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm, poids_kg: lastWeight(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '' },
+    nutrition: { cibles: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat }, allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, plan_de_repas: meals },
+    programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => EXERCISES[e.id].name) })),
+    semaine_legere: !!pl.deload,
+    derniers_checkins: S.checkins.slice(-4).map(({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes }) => ({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes })),
+    ajustements_du_coach: (pl.reasons || []).map((r) => r.text),
+  };
+}
+
+function vCoach() {
+  const hist = chatLoad();
+  return `
+  <section class="card">
+    <h2>Ton espace coach</h2>
+    <p class="muted">${canAI()
+      ? 'Pose tes questions sur ton entraînement, tes repas ou tes résultats. Je connais ton profil et ton plan. Je ne remplace pas un professionnel de la santé.'
+      : 'Mode simple : je réponds aux questions sur l’application. Le coach IA complet n’est pas encore activé (voir le README, section « Avis IA »).'}</p>
+    <div class="chat">
+      ${hist.length ? hist.map((m) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>`).join('') : '<p class="muted">Pose ta première question ou choisis une suggestion.</p>'}
+      ${S.chatBusy ? '<div class="bubble ai">…</div>' : ''}
+    </div>
+    <div class="chips">${CHIPS.map((c) => `<button type="button" class="ghost small" data-act="ask" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <form data-form="chat" class="chatform">
+      <textarea name="q" rows="2" placeholder="Écris ton message…" required></textarea>
+      <button ${S.chatBusy ? 'disabled' : ''}>Envoyer</button>
+    </form>
+    ${hist.length ? '<button type="button" class="ghost small" data-act="clearChat">Effacer la conversation</button>' : ''}
+  </section>`;
+}
+async function ask(q) {
+  const hist = chatLoad();
+  hist.push({ r: 'user', t: q });
+  chatSave(hist);
+  S.chatBusy = true;
+  render();
+  window.scrollTo(0, document.body.scrollHeight);
+  let text;
+  try {
+    text = canAI()
+      ? await db.askCoach({ messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext() })
+      : faq(q);
+  } catch (e) {
+    text = `${faq(q)}\n\n(Le coach IA est indisponible pour le moment : ${e.message})`;
+  }
+  hist.push({ r: 'ai', t: text });
+  chatSave(hist);
+  S.chatBusy = false;
+  render();
+  window.scrollTo(0, document.body.scrollHeight);
+}
+acts.ask = (el) => ask(el.dataset.q);
+acts.clearChat = () => { chatSave([]); render(); };
+forms.chat = async (form) => {
+  const q = String(new FormData(form).get('q') || '').trim();
+  if (q && !S.chatBusy) await ask(q);
+};
+
 function profileForm(p = {}, label = 'Enregistrer') {
   const opt = (v, t, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
   return `
@@ -301,6 +589,8 @@ function profileForm(p = {}, label = 'Enregistrer') {
     </div>
     <label>Activité hors entraînement</label>
     <select name="activity">${opt('low', 'Surtout assis', p.activity)}${opt('medium', 'Assez actif', p.activity ?? 'medium')}${opt('high', 'Très actif / travail physique', p.activity)}</select>
+    <label>Blessures ou exercices à éviter (optionnel)</label>
+    <textarea name="limitations" rows="2" placeholder="ex. genou droit fragile, pas de barre au-dessus de la tête">${esc(p.limitations ?? '')}</textarea>
     <label><input type="checkbox" name="share_photos" ${p.share_photos === false ? '' : 'checked'}> Partager mes photos avec mon ami</label>
     <button class="block" style="margin-top:14px">${label}</button>
   </form>`;
@@ -315,9 +605,9 @@ function vSettings() {
   </section>`;
 }
 
-const routes = { home: vHome, train: vTrain, food: vFood, checkin: vCheckin, progress: vProgress, settings: vSettings };
-const TITLES = { home: 'Accueil', train: 'Entraînement', food: 'Nutrition', checkin: 'Check-in', progress: 'Progrès', settings: 'Réglages' };
-const TABS = [['home', '🏠', 'Accueil'], ['train', '🏋️', 'Séance'], ['food', '🍽️', 'Nutrition'], ['checkin', '📝', 'Check-in'], ['progress', '📈', 'Progrès']];
+const routes = { home: vHome, train: vTrain, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
+const TITLES = { home: 'Accueil', train: 'Entraînement', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
+const TABS = [['home', '🏠', 'Accueil'], ['train', '🏋️', 'Séance'], ['food', '🍽️', 'Repas'], ['checkin', '📝', 'Check-in'], ['progress', '📈', 'Progrès'], ['coach', '💬', 'Coach']];
 
 // ================= Rendu =================
 function render() {
@@ -352,6 +642,8 @@ function route() {
   const name = (location.hash.replace('#/', '') || 'home').split('?')[0];
   S.view = routes[name] ? name : 'home';
   if (S.view !== 'train') S.dayIdx = null;
+  if (S.view !== 'food') S.editPrefs = false;
+  closeSheet();
   render();
   window.scrollTo(0, 0);
 }
@@ -368,7 +660,6 @@ acts.pickDay = (el) => { S.dayIdx = +el.dataset.arg; render(); };
 acts.who = (el) => { S.who = el.dataset.arg; render(); };
 acts.seeOther = () => { S.who = 'other'; };
 acts.slot = (el) => { S.slot = el.dataset.arg; render(); };
-acts.setMeals = (el) => { localStorage.setItem('meals', el.value); render(); };
 acts.toggleAuth = (el, e) => { e.preventDefault(); S.authMode = S.authMode === 'in' ? 'up' : 'in'; render(); };
 acts.logout = async () => { await db.signOut(); S.me = null; S.profile = null; render(); };
 acts.resetDemo = () => { db.resetDemo(); location.hash = '#/home'; location.reload(); };
@@ -377,10 +668,8 @@ acts.askAI = async (el) => {
   try {
     const cur = S.checkins.find((c) => c.week_start === mondayOf());
     const text = await db.askCoach({
-      profile: { goal: S.profile.goal, sex: S.profile.sex, height_cm: S.profile.height_cm },
-      plan: { calories: S.plan.calories, protein: S.plan.protein, deload: S.plan.deload },
-      checkins: S.checkins.slice(-6).map(({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes }) => ({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes })),
-      rules_said: cur.coach.messages.map((m) => m.text),
+      messages: [{ role: 'user', text: 'Commente ma semaine en 4 à 6 phrases : ce qui va bien, ce qui inquiète, et une action concrète pour la semaine à venir.' }],
+      context: { ...aiContext(), ajustements_du_coach: cur.coach.messages.map((m) => m.text) },
     });
     await db.saveCheckin({ ...cur, coach: { ...cur.coach, ai: text } });
     await refresh();
@@ -400,32 +689,59 @@ forms.auth = async (form) => {
 
 forms.profile = async (form) => {
   const fd = Object.fromEntries(new FormData(form));
+  const old = S.profile;
   const p = {
+    ...(old || {}),
     id: S.me.id, name: fd.name.trim(), sex: fd.sex, birth_year: +fd.birth_year, height_cm: +fd.height_cm,
     start_weight: +fd.start_weight, goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
-    activity: fd.activity, share_photos: !!fd.share_photos,
+    activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
-  const old = S.profile;
   try {
     await db.saveProfile(p);
     if (!old) {
       await db.savePlan({
         user_id: S.me.id, ...calcTargets(p, p.start_weight), program: buildProgram(p.days_per_week, p.equipment),
-        deload: false, hold: false, reasons: [{ icon: '🚀', text: 'Plan de départ créé selon ton profil. Fais ton premier check-in pour lancer le suivi.' }],
+        deload: false, hold: false, meal_plan: null,
+        reasons: [{ icon: '🚀', text: 'Plan de départ créé selon ton profil. Fais ton premier check-in pour lancer le suivi.' }],
       });
       await refresh('home');
       return;
     }
+    S.profile = p;
     const programChanged = old.days_per_week !== p.days_per_week || old.equipment !== p.equipment;
     const targetsChanged = old.goal !== p.goal || old.activity !== p.activity;
     if (programChanged || targetsChanged) {
-      const t = targetsChanged ? calcTargets(p, lastWeight()) : { calories: S.plan.calories, protein: S.plan.protein, carbs: S.plan.carbs, fat: S.plan.fat };
-      await db.savePlan({
-        user_id: S.me.id, ...t, program: programChanged ? buildProgram(p.days_per_week, p.equipment) : S.plan.program,
-        deload: S.plan.deload, hold: S.plan.hold, reasons: [{ icon: '🛠️', text: 'Plan mis à jour après le changement de ton profil.' }],
-      });
+      const ch = { reasons: [{ icon: '🛠️', text: 'Plan mis à jour après le changement de ton profil.' }] };
+      if (programChanged) ch.program = buildProgram(p.days_per_week, p.equipment);
+      if (targetsChanged) Object.assign(ch, calcTargets(p, lastWeight()));
+      await savePlan(ch);
     }
     toast('Profil enregistré');
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+
+forms.food = async (form) => {
+  const fd = new FormData(form);
+  const pr = { allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), done: true };
+  try {
+    await db.saveProfile({ ...S.profile, food_prefs: pr });
+    S.profile = { ...S.profile, food_prefs: pr };
+    await savePlan({ meal_plan: buildChoices(pr, Date.now(), S.plan) });
+    S.editPrefs = false;
+    toast('Plan de repas créé');
+    await refresh('food');
+  } catch (e) { toast(e.message); }
+};
+
+forms.targets = async (form) => {
+  const fd = new FormData(form);
+  const calories = +fd.get('calories'), protein = +fd.get('protein'), fat = +fd.get('fat');
+  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
+  try {
+    await savePlan({ calories, protein, fat, carbs, reasons: [{ icon: '✏️', text: 'Cibles modifiées à la main. Le coach repartira de ces valeurs au prochain check-in.' }] });
+    closeSheet();
+    toast('Cibles enregistrées');
     await refresh();
   } catch (e) { toast(e.message); }
 };
@@ -483,30 +799,39 @@ forms.checkin = async (form) => {
     const res = weeklyAdjust({ profile: S.profile, plan: S.plan, checkins: all });
     c.coach = { messages: res.messages, deload: res.deload };
     await db.saveCheckin(c);
-    await db.savePlan({
-      user_id: S.me.id, calories: res.calories, protein: res.protein, carbs: res.carbs, fat: res.fat,
-      program: S.plan.program, deload: res.deload, hold: res.hold, reasons: res.messages,
-    });
+    await savePlan({ calories: res.calories, protein: res.protein, carbs: res.carbs, fat: res.fat, deload: res.deload, hold: res.hold, reasons: res.messages });
     await refresh('checkin');
   } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = 'Envoyer mon check-in'; }
 };
 
 // ================= Événements globaux =================
-root.addEventListener('click', (e) => {
-  const el = e.target.closest('[data-act]');
-  if (el && el.tagName !== 'SELECT' && acts[el.dataset.act]) acts[el.dataset.act](el, e);
-});
-root.addEventListener('change', (e) => {
-  const el = e.target.closest('select[data-act]');
-  if (el && acts[el.dataset.act]) acts[el.dataset.act](el, e);
-});
-root.addEventListener('submit', (e) => {
-  const f = e.target.closest('form[data-form]');
-  if (f && forms[f.dataset.form]) { e.preventDefault(); forms[f.dataset.form](f, e); }
-});
-root.addEventListener('input', (e) => {
-  if (e.target.type === 'range') e.target.nextElementSibling.textContent = e.target.value + '%';
-});
+function bindEvents(el) {
+  el.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-act]');
+    if (t && t.tagName !== 'SELECT' && acts[t.dataset.act]) acts[t.dataset.act](t, e);
+  });
+  el.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tap[data-act]')) { e.preventDefault(); e.target.click(); }
+  });
+  el.addEventListener('change', (e) => {
+    const t = e.target.closest('select[data-act]');
+    if (t && acts[t.dataset.act]) acts[t.dataset.act](t, e);
+  });
+  el.addEventListener('submit', (e) => {
+    const f = e.target.closest('form[data-form]');
+    if (f && forms[f.dataset.form]) { e.preventDefault(); forms[f.dataset.form](f, e); }
+  });
+  el.addEventListener('input', (e) => {
+    if (e.target.type === 'range') e.target.nextElementSibling.textContent = e.target.value + '%';
+  });
+}
+bindEvents(root);
+bindEvents(sheetEl);
+// Si la photo d'un exercice ne charge pas depuis le premier hébergeur, on essaie le second.
+document.addEventListener('error', (e) => {
+  const t = e.target;
+  if (t.tagName === 'IMG' && t.dataset.fb && !t.dataset.tried) { t.dataset.tried = '1'; t.src = t.dataset.fb; }
+}, true);
 
 // ================= Démarrage =================
 (async function boot() {

@@ -43,6 +43,15 @@ export function macros(p, kg, calories) {
   return { calories, protein, carbs, fat };
 }
 
+// Autres repères de nutrition (indicatifs) : fibres, eau, gras saturés
+export function extraTargets(calories, kg) {
+  return {
+    fibre: Math.round((14 * calories) / 1000),          // 14 g de fibres par 1000 kcal
+    eau: Math.round(kg * 0.035 * 10) / 10,              // environ 35 ml par kg, en litres
+    satfat: Math.round((calories * 0.1) / 9),           // gras saturés : au plus 10 % des calories
+  };
+}
+
 // Cibles de départ
 export function calcTargets(p, kg) {
   const tdee = bmr(p, kg) * RULES.activity[p.activity || 'medium'];

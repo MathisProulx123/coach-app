@@ -15,6 +15,8 @@ create table if not exists profiles (
   equipment text not null,
   activity text not null default 'medium',
   share_photos boolean not null default true,
+  food_prefs jsonb,
+  limitations text default '',
   created_at timestamptz not null default now()
 );
 
@@ -29,7 +31,8 @@ create table if not exists plans (
   program jsonb not null,
   deload boolean not null default false,
   hold boolean not null default false,
-  reasons jsonb not null default '[]'
+  reasons jsonb not null default '[]',
+  meal_plan jsonb
 );
 
 create table if not exists workouts (

@@ -69,3 +69,35 @@ nav a.on { color: var(--accent); }
 .photos img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; background: var(--line); }
 svg.chart { width: 100%; height: auto; }
 .auth { max-width: 420px; margin: 8vh auto; padding: 16px; }
+
+/* Exercices, repas, fenêtre du bas, coach */
+button.small, .btn.small { padding: 6px 12px; font-size: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.tap { cursor: pointer; }
+.thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: var(--line); flex: none; }
+.food { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.food:first-of-type { border-top: 0; }
+.alt { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+label.check { display: flex; gap: 8px; align-items: center; margin: 0; color: var(--text); font-size: 15px; }
+figure { margin: 0; }
+figure img { width: 100%; aspect-ratio: 3/2; object-fit: cover; border-radius: 10px; background: var(--line); }
+.photos.one { grid-template-columns: 1fr; margin-bottom: 10px; }
+figcaption { text-align: center; color: var(--muted); font-size: 13px; margin-top: 4px; }
+#sheet { position: fixed; inset: 0; z-index: 30; }
+#sheet[hidden] { display: none; }
+#sheet .backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
+#sheet .panel {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 88vh; overflow-y: auto; background: var(--card);
+  border-radius: 18px 18px 0 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto;
+}
+body.noscroll { overflow: hidden; }
+.chat { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.bubble { padding: 10px 12px; border-radius: 14px; max-width: 92%; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: var(--accent-text); }
+.bubble.ai { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chips button { text-align: left; }
+.chatform { display: flex; gap: 8px; align-items: flex-end; }
+.chatform textarea { flex: 1; }
+nav a { font-size: 10px; }

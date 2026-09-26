@@ -44,21 +44,39 @@ La clé « anon » est faite pour être publique. La sécurité vient des règle
 - **iPhone (Safari)** : bouton Partager → **Sur l'écran d'accueil**.
 - **Android (Chrome)** : menu ⋮ → **Installer l'application**.
 
-## 5. Avis IA (optionnel, gratuit)
+## 5. Coach IA (optionnel, gratuit)
+
+Sans l'IA, l'onglet **Coach** répond déjà aux questions sur l'application (mode simple). Avec l'IA, il connaît ton profil, ton plan et tes check-ins, et répond à tes questions ou t'aide à décider d'un changement. Il commente aussi ta semaine après chaque check-in.
 
 1. Crée une clé gratuite sur https://aistudio.google.com/apikey.
 2. Supabase : **Edge Functions → Deploy a new function → Via Editor**, nom `coach-ai`, colle le contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**.
 3. **Edge Functions → Secrets** : ajoute `GEMINI_API_KEY` avec ta clé.
 4. Dans `js/config.js`, mets `AI_ENABLED: true` et remets les fichiers en ligne.
 
-Un bouton « Demander un avis » apparaît alors après chaque check-in. Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec le nouveau nom.
+Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec le nouveau nom. L'offre gratuite a une limite de messages par minute et par jour.
+
+## Mise à jour de la base (migration)
+
+Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql` pour les repas), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données.
+
+## Les exercices : photos et variantes
+
+Dans l'onglet **Séance**, touche un exercice : tu vois la photo de départ et d'arrivée et une consigne. « Voir les variantes » propose des remplacements qui travaillent les mêmes muscles, et le choix s'applique à tout ton programme. Les photos viennent de la base libre [Free Exercise DB](https://github.com/yuhonas/free-exercise-db) (domaine public).
+
+## Le plan de repas
+
+Dans l'onglet **Repas**, l'app pose d'abord tes allergies, ton régime et ce que tu n'aimes pas, puis crée de vrais repas (aliments, quantités, marques) qui atteignent tes cibles de calories, protéines, glucides et lipides. Tu peux échanger un aliment (↔), refaire un repas, modifier tes cibles à la main ou voir la liste d'épicerie de la semaine. Les quantités se recalculent automatiquement quand le coach change tes calories.
+
+Les marques sont des exemples courants au Québec et les valeurs nutritives sont des moyennes : vérifie l'étiquette de ta marque. Pour ajouter un aliment, ajoute une ligne dans `js/foods.js`.
 
 ## Comment ça marche
 
 | Fichier | Rôle |
 |---|---|
 | `js/rules.js` | **Le coach** : calories, protéines, ajustements hebdomadaires, progression des charges, semaines légères. Tous les chiffres sont en haut, commentés. |
-| `js/data.js` | Les exercices et les programmes (2 à 6 jours, salle ou maison). |
+| `js/data.js` | Les exercices (photos, consignes, variantes) et les programmes (2 à 6 jours, salle ou maison). |
+| `js/foods.js` | La base d'aliments (valeurs nutritives, allergènes, marques). |
+| `js/meals.js` | Le générateur de plan de repas. |
 | `js/app.js` | Les écrans. |
 | `js/db.js` | Le lien avec Supabase (et le mode démo). |
 | `js/config.js` | Vos clés et l'option IA. |

@@ -4,7 +4,8 @@
 import { CONFIG } from './config.js';
 import { today, addDays, mondayOf } from './util.js';
 
-export const DEMO = !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
+// Ajouter ?demo à l'adresse force le mode démo (données locales seulement), même une fois Supabase branché.
+export const DEMO = !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY || new URLSearchParams(location.search).has('demo');
 const LS = 'coach_demo_v1';
 let sb = null;
 let store = null;
