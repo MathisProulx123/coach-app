@@ -298,7 +298,7 @@ function vFood() {
       <div class="stat"><b>${pl.carbs}</b><span>glucides g</span></div><div class="stat"><b>${pl.fat}</b><span>lipides g</span></div>
     </div>
     <div class="grid3" style="margin-top:10px">
-      <div class="stat"><b>≥ ${ex.fibre} g</b><span>fibres</span></div><div class="stat"><b>≈ ${String(ex.eau).replace('.', ',')} L</b><span>eau</span></div>
+      <div class="stat"><b>≥ ${ex.fibre} g</b><span>fibres</span></div><div class="stat"><b>${pr.water ? '' : '≈ '}${String(pr.water ?? ex.eau).replace('.', ',')} L</b><span>eau</span></div>
       <div class="stat"><b>≤ ${ex.satfat} g</b><span>gras saturés</span></div>
     </div>
     <p class="muted">Le coach ajuste ces cibles chaque semaine selon ton check-in.</p>
@@ -387,6 +387,7 @@ acts.editTargets = () => {
       <label>Calories (kcal)</label><input name="calories" type="number" min="1000" max="6000" required value="${p.calories}">
       <label>Protéines (g)</label><input name="protein" type="number" min="40" max="400" required value="${p.protein}">
       <label>Lipides (g)</label><input name="fat" type="number" min="20" max="250" required value="${p.fat}">
+      <label>Eau (litres par jour)</label><input name="eau" type="number" step="0.1" min="1" max="8" required value="${prefs().water ?? extraTargets(p.calories, lastWeight()).eau}">
       <button class="block" style="margin-top:12px">Enregistrer</button>
     </form>`);
 };
@@ -507,15 +508,16 @@ function faq(q) {
   if (has('charge', 'poids', 'kg', 'progress')) {
     return 'Quand toutes tes séries atteignent le haut de la fourchette de répétitions, l’objectif de charge monte à la séance suivante (+2,5 kg haut du corps, +5 kg bas du corps). Il est affiché sur chaque exercice.';
   }
-  return 'Je peux répondre aux questions sur l’application (exercices, repas, cibles, check-in). Pour un coaching plus personnalisé, il faut activer le coach IA (voir le README, section « Avis IA »). Note ton idée et on l’ajoutera à l’application.';
+  return null;
 }
+const FAQ_DEFAULT = 'Je peux répondre aux questions sur l’application (exercices, repas, cibles, check-in). Pour un coaching plus personnalisé, il faut activer le coach IA (voir le README, section « Coach IA »). Note ton idée et on l’ajoutera à l’application.';
 
 function aiContext() {
   const p = S.profile, pl = S.plan, pr = prefs();
   const meals = pl.meal_plan ? computeDay(pl, pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
   return {
     profil: { objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm, poids_kg: lastWeight(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '' },
-    nutrition: { cibles: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat }, allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, plan_de_repas: meals },
+    nutrition: { cibles: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau }, allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, plan_de_repas: meals },
     programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => EXERCISES[e.id].name) })),
     semaine_legere: !!pl.deload,
     derniers_checkins: S.checkins.slice(-4).map(({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes }) => ({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes })),
@@ -551,12 +553,23 @@ async function ask(q) {
   render();
   window.scrollTo(0, document.body.scrollHeight);
   let text;
-  try {
-    text = canAI()
-      ? await db.askCoach({ messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext() })
-      : faq(q);
-  } catch (e) {
-    text = `${faq(q)}\n\n(Le coach IA est indisponible pour le moment : ${e.message})`;
+  if (!canAI()) {
+    text = faq(q) ?? FAQ_DEFAULT;
+  } else {
+    const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext() };
+    const transient = (e) => /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
+    try {
+      try {
+        text = await db.askCoach(payload);
+      } catch (e) {
+        if (!transient(e)) throw e;
+        await new Promise((r) => setTimeout(r, 3000)); // Google est parfois surchargé : on réessaie une fois
+        text = await db.askCoach(payload);
+      }
+    } catch (e) {
+      const help = faq(q);
+      text = `${help ? `${help}\n\n` : ''}Le coach IA est momentanément indisponible, réessaie dans quelques instants.\n(${e.message})`;
+    }
   }
   hist.push({ r: 'ai', t: text });
   chatSave(hist);
@@ -738,7 +751,13 @@ forms.targets = async (form) => {
   const fd = new FormData(form);
   const calories = +fd.get('calories'), protein = +fd.get('protein'), fat = +fd.get('fat');
   const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
+  const eau = Math.round(parseFloat(String(fd.get('eau')).replace(',', '.')) * 10) / 10;
   try {
+    if (eau > 0 && eau !== prefs().water) {
+      const food_prefs = { ...(S.profile.food_prefs || {}), water: eau };
+      await db.saveProfile({ ...S.profile, food_prefs });
+      S.profile = { ...S.profile, food_prefs };
+    }
     await savePlan({ calories, protein, fat, carbs, reasons: [{ icon: '✏️', text: 'Cibles modifiées à la main. Le coach repartira de ces valeurs au prochain check-in.' }] });
     closeSheet();
     toast('Cibles enregistrées');
