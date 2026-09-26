@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const key = Deno.env.get('GEMINI_API_KEY');
     // Si Google change le nom du modèle gratuit, modifie GEMINI_MODEL dans les secrets Supabase.
-    const model = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+    const model = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash';
     if (!key) throw new Error('GEMINI_API_KEY manquante');
 
     const messages = Array.isArray(body.messages) && body.messages.length
@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM }] },
           contents,
-          generationConfig: { temperature: 0.6, maxOutputTokens: 700 },
+          // Les modèles récents « réfléchissent » avant de répondre : on garde de la marge pour ne pas couper la réponse.
+          generationConfig: { temperature: 0.6, maxOutputTokens: 2048 },
         }),
       },
     );
