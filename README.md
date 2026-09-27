@@ -57,7 +57,27 @@ Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec
 
 ## Mise à jour de la base (migration)
 
-Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql` pour les repas), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données.
+Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql`, `migration_003.sql`), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).
+
+## Semaines personnelles
+
+La première semaine de chacun commence le jour de son tout premier check-in (pas forcément un lundi) ; les semaines suivantes s'enchaînent tous les 7 jours à partir de là. Chaque personne a son propre point de départ. Si un premier check-in a été fait par erreur un mauvais jour, supprime cette ligne dans **Table Editor → checkins** et refais le check-in : le bon jour deviendra le nouveau point de départ.
+
+## Jour d'entraînement / jour de repos
+
+Onglet Repas : un bouton en haut choisit le type de jour. Les glucides (donc les calories) montent les jours d'entraînement et baissent les jours de repos ; protéines et lipides ne changent pas. Réglable dans `js/rules.js` → `RULES.dayCycle`. Les cibles affichées ailleurs (calories moyennes que le coach ajuste) restent la moyenne de la semaine.
+
+## Unité de poids (kg / lb)
+
+Réglages → bascule kg/lb. N'affecte que l'affichage : tout reste stocké en kilogrammes, donc chacun choisit son unité sans rien casser pour l'autre.
+
+## Recherche d'un aliment précis
+
+Dans la fenêtre d'échange d'un aliment (bouton ↔), une recherche interroge [Open Food Facts](https://world.openfoodfacts.org) (base ouverte, gratuite, sans clé) pour trouver un produit précis avec sa vraie marque. Les données viennent de la communauté : vérifie l'étiquette réelle si un résultat semble étrange.
+
+## Coach IA : photos et cibles plus poussées
+
+Le bouton **Demander un avis** (après un check-in) et le bouton **Analyser mes photos de progrès** (onglet Coach) envoient tes photos de progrès à Google (Gemini) pour qu'il commente aussi ce qui est visible dessus, pas seulement tes chiffres. Cela demande la fonction `coach-ai` à jour (voir plus haut) ; aucun secret supplémentaire n'est nécessaire, la fonction va chercher les photos elle-même dans ton compte Supabase de façon sécurisée. Sans coach IA activé, ces boutons n'apparaissent pas.
 
 ## Les exercices : photos et variantes
 
