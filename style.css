@@ -101,3 +101,11 @@ body.noscroll { overflow: hidden; }
 .chatform { display: flex; gap: 8px; align-items: flex-end; }
 .chatform textarea { flex: 1; }
 nav a { font-size: 10px; }
+[hidden] { display: none !important; }
+.thumb.ph { display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.dayname { flex: 1; min-width: 0; font-weight: 600; }
+.exrow { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.exrow .thumb { width: 48px; height: 48px; }
+.exrow .col { display: flex; flex-direction: column; gap: 4px; }
+.exrow .col button, .row button.small { padding: 4px 9px; }
+input.mini { width: 58px; padding: 6px; text-align: center; }

@@ -63,7 +63,17 @@ function toast(msg) {
 const bar = (v, t) => `<div class="bar"><i style="width:${Math.min(100, t ? (v / t) * 100 : 0)}%"></i></div>`;
 const GOALS = { lose: 'Perdre du gras', maintain: 'Maintenir', gain: 'Prendre du muscle' };
 const LEVEL5 = ['1 · Très bas', '2 · Bas', '3 · Correct', '4 · Bon', '5 · Excellent'];
-const thumb = (id) => `<img class="thumb" loading="lazy" src="${imgUrl(id, 0)}" data-fb="${imgFallback(id, 0)}" alt="">`;
+const thumb = (id) => EXERCISES[id]
+  ? `<img class="thumb" loading="lazy" src="${imgUrl(id, 0)}" data-fb="${imgFallback(id, 0)}" alt="">`
+  : '<div class="thumb ph" aria-hidden="true">🏋️</div>';
+
+// Un exercice du programme peut venir de la bibliothèque ou être créé par la personne (définition dans e.custom).
+function customDef(c = {}) {
+  return { name: c.name || 'Exercice', bw: c.kind === 'bw', time: c.kind === 'time', lower: !!c.lower, cue: c.cue || '', url: c.url || '', custom: true };
+}
+const defOf = (e) => EXERCISES[e.id] || customDef(e.custom);
+const findEntry = (id) => S.plan.program.flatMap((d) => d.exercises).find((e) => e.id === id);
+const defById = (id) => EXERCISES[id] || customDef(findEntry(id)?.custom);
 const m1 = (n) => Math.round(n);
 
 function lineChart(points) {
@@ -153,7 +163,7 @@ function vHome() {
   </section>
   <section class="card">
     <div class="row between"><h2>Prochaine séance</h2>${plan.deload ? '<span class="pill">Semaine légère</span>' : ''}</div>
-    <p><b>${esc(day.label)}</b><br><span class="muted">${day.exercises.map((e) => esc(EXERCISES[e.id].name)).join(' · ')}</span></p>
+    <p><b>${esc(day.label)}</b><br><span class="muted">${day.exercises.map((e) => esc(defOf(e).name)).join(' · ')}</span></p>
     <button class="block" data-act="startDay" data-arg="${idx}">Commencer</button>
   </section>
   <section class="card">
@@ -185,11 +195,12 @@ function vTrain() {
   return `
   <div class="tabs">${prog.map((d, i) => `<button class="${i === idx ? 'on' : ''}" data-act="pickDay" data-arg="${i}">${esc(d.label)}</button>`).join('')}</div>
   ${S.plan.deload ? '<div class="card"><span class="pill">Semaine légère</span> Moins de séries et charges réduites pour bien récupérer.</div>' : ''}
+  <a class="btn ghost block small" style="margin-bottom:12px" href="#/edit">✏️ Modifier mon programme (jours, exercices)</a>
   <form data-form="workout" data-day="${idx}" class="card">
     <h2>${esc(day.label)}</h2>
     <p class="muted">Touche un exercice pour voir la position de départ et d’arrivée, ou pour le remplacer.</p>
     ${day.exercises.map((ex, i) => {
-      const def = EXERCISES[ex.id];
+      const def = defOf(ex);
       const last = lastSets(ex.id);
       const t = nextTarget(def, ex, last, { deload: S.plan.deload, hold: S.plan.hold });
       const unit = def.time ? 's' : 'reps';
@@ -215,7 +226,15 @@ function vTrain() {
 
 // ----- Fiche d'un exercice (photos avant / après, consigne, variantes) -----
 function exInfoHtml(id) {
-  const ex = EXERCISES[id];
+  const ex = defById(id);
+  if (ex.custom) {
+    return `
+    <div class="row between"><h2>${esc(ex.name)}</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <p><span class="pill">exercice personnalisé</span></p>
+    ${ex.cue ? `<p>${esc(ex.cue)}</p>` : '<p class="muted">Pas de consigne enregistrée.</p>'}
+    ${/^https?:\/\//i.test(ex.url) ? `<a class="btn ghost block" href="${esc(ex.url)}" target="_blank" rel="noopener noreferrer">Voir la vidéo</a>` : ''}
+    <a class="btn ghost block" style="margin-top:8px" href="#/edit">Modifier mon programme</a>`;
+  }
   const fig = (n, label) => `<figure><img src="${imgUrl(id, n)}" data-fb="${imgFallback(id, n)}" alt="${label} : ${esc(ex.name)}"><figcaption>${label}</figcaption></figure>`;
   return `
     <div class="row between"><h2>${esc(ex.name)}</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
@@ -260,6 +279,148 @@ acts.exSwap = async (el) => {
     toast(`${od.name} → ${nw.name}`);
     await refresh();
   } catch (e) { toast(e.message); }
+};
+
+// ----- Éditeur de programme : jours, exercices, exercices personnalisés (brouillon puis « Enregistrer ») -----
+const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const dOf = (el) => +el.dataset.d;
+const eOf = (el) => +el.dataset.e;
+function move(arr, i, dir) { const j = i + dir; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+
+function vEdit() {
+  const prog = S.draft;
+  const mini = (k, d, e, v) => `<input class="mini" type="number" inputmode="numeric" min="1" max="${k === 'sets' ? 10 : 300}" data-edit="${k}" data-d="${d}" data-e="${e}" value="${v}" aria-label="${k === 'sets' ? 'Séries' : k === 'lo' ? 'Répétitions minimum' : 'Répétitions maximum'}">`;
+  const btn = (act, d, e, dir, label, aria, disabled = false) => `<button type="button" class="ghost small" data-act="${act}" data-d="${d}" ${e !== null ? `data-e="${e}"` : ''} ${dir ? `data-dir="${dir}"` : ''} ${disabled ? 'disabled' : ''} aria-label="${aria}">${label}</button>`;
+  return `
+  <p class="muted">Change tes jours et tes exercices, puis touche <b>Enregistrer</b> en bas. Rien n’est gardé avant.</p>
+  ${prog.map((d, di) => `
+    <section class="card">
+      <div class="row" style="gap:6px">
+        <input class="dayname" data-edit="dayname" data-d="${di}" value="${esc(d.label)}" aria-label="Nom du jour" maxlength="30">
+        ${btn('dayMove', di, null, -1, '↑', 'Monter ce jour', di === 0)}${btn('dayMove', di, null, 1, '↓', 'Descendre ce jour', di === prog.length - 1)}${btn('delDay', di, null, 0, '🗑', 'Supprimer ce jour')}
+      </div>
+      ${d.exercises.map((e, ei) => { const def = defOf(e); return `
+        <div class="exrow">
+          ${thumb(e.id)}
+          <div style="flex:1;min-width:0">
+            <b>${esc(def.name)}</b>${def.custom ? ' <span class="pill">perso</span>' : ''}
+            <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
+              ${mini('sets', di, ei, e.sets)} <span class="muted">×</span> ${mini('lo', di, ei, e.lo)} <span class="muted">–</span> ${mini('hi', di, ei, e.hi)} <span class="muted">${def.time ? 's' : 'reps'}</span>
+            </div>
+          </div>
+          <div class="col">
+            ${btn('exMove', di, ei, -1, '↑', 'Monter', ei === 0)}${btn('exMove', di, ei, 1, '↓', 'Descendre', ei === d.exercises.length - 1)}
+            ${def.custom ? btn('editCustom', di, ei, 0, '✎', 'Modifier cet exercice') : ''}${btn('delEx', di, ei, 0, '🗑', 'Retirer cet exercice')}
+          </div>
+        </div>`; }).join('') || '<p class="muted">Aucun exercice dans ce jour.</p>'}
+      <button type="button" class="ghost block" style="margin-top:8px" data-act="addEx" data-d="${di}">+ Ajouter un exercice</button>
+    </section>`).join('')}
+  <button type="button" class="ghost block" data-act="addDay">+ Ajouter un jour d’entraînement</button>
+  <div class="grid2" style="margin-top:12px">
+    <button type="button" data-act="saveProgram">Enregistrer</button>
+    <button type="button" class="ghost" data-act="cancelEdit">Annuler</button>
+  </div>
+  <button type="button" class="ghost small block" style="margin-top:12px" data-act="resetProgram">Rétablir le programme de départ</button>`;
+}
+function editField(t) {
+  const d = +t.dataset.d, k = t.dataset.edit;
+  if (k === 'dayname') { const v = t.value.trim(); if (v) S.draft[d].label = v.slice(0, 30); return; }
+  const ex = S.draft[d].exercises[+t.dataset.e];
+  ex[k] = Math.max(1, Math.min(k === 'sets' ? 10 : 300, Math.round(+t.value || 1)));
+  if (ex.lo > ex.hi) { if (k === 'lo') ex.hi = ex.lo; else ex.lo = ex.hi; }
+  render();
+}
+acts.dayMove = (el) => { move(S.draft, dOf(el), +el.dataset.dir); render(); };
+acts.delDay = (el) => {
+  if (S.draft.length <= 1) return toast('Garde au moins un jour d’entraînement.');
+  if (!confirm('Supprimer ce jour et ses exercices ?')) return;
+  S.draft.splice(dOf(el), 1);
+  render();
+};
+acts.addDay = () => { S.draft.push({ label: `Jour ${S.draft.length + 1}`, exercises: [] }); render(); window.scrollTo(0, document.body.scrollHeight); };
+acts.exMove = (el) => { move(S.draft[dOf(el)].exercises, eOf(el), +el.dataset.dir); render(); };
+acts.delEx = (el) => { S.draft[dOf(el)].exercises.splice(eOf(el), 1); render(); };
+acts.addEx = (el) => {
+  const di = dOf(el);
+  const used = new Set(S.draft[di].exercises.map((e) => e.id));
+  const list = Object.entries(EXERCISES).filter(([id, x]) => !used.has(id) && (S.profile.equipment !== 'home' || x.home));
+  openSheet(`
+    <div class="row between"><h2>Ajouter un exercice</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <input type="search" data-filter placeholder="Rechercher (ex. curl, presse, fentes)…" aria-label="Rechercher un exercice">
+    <button type="button" class="block" style="margin:10px 0" data-act="newEx" data-d="${di}">+ Créer un exercice personnalisé</button>
+    ${list.map(([id, x]) => `
+      <div class="alt" data-name="${esc(norm(x.name))}">
+        ${thumb(id)}
+        <div style="flex:1"><b>${esc(x.name)}</b><div class="muted">${esc(x.cue.slice(0, 90))}…</div></div>
+        <button type="button" class="small" data-act="pickEx" data-d="${di}" data-id="${id}">Ajouter</button>
+      </div>`).join('')}`);
+};
+acts.pickEx = (el) => {
+  const id = el.dataset.id, x = EXERCISES[id];
+  S.draft[dOf(el)].exercises.push({ id, sets: x.time ? 2 : 3, lo: x.time ? 30 : 8, hi: x.time ? 60 : 12 });
+  closeSheet();
+  render();
+};
+function customFormHtml(di, ei = null) {
+  const cur = ei !== null ? S.draft[di].exercises[ei] : null;
+  const c = cur?.custom || {};
+  const kind = c.kind || 'load';
+  const o = (v, t) => `<option value="${v}" ${kind === v ? 'selected' : ''}>${t}</option>`;
+  return `
+    <div class="row between"><h2>${cur ? 'Modifier l’exercice' : 'Nouvel exercice'}</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
+    <form data-form="customEx" data-d="${di}" ${cur ? `data-e="${ei}"` : ''}>
+      <label>Nom</label><input name="name" required maxlength="60" value="${esc(c.name || '')}" placeholder="ex. Tirage poitrine au câble">
+      <label>Type</label><select name="kind">${o('load', 'Avec charge (kg)')}${o('bw', 'Poids du corps')}${o('time', 'Durée (secondes)')}</select>
+      <div class="grid3">
+        <div><label>Séries</label><input name="sets" type="number" min="1" max="10" required value="${cur?.sets ?? 3}"></div>
+        <div><label>Min</label><input name="lo" type="number" min="1" max="300" required value="${cur?.lo ?? 8}"></div>
+        <div><label>Max</label><input name="hi" type="number" min="1" max="300" required value="${cur?.hi ?? 12}"></div>
+      </div>
+      <label>Consigne (optionnel)</label><textarea name="cue" rows="3" maxlength="400" placeholder="Comment faire l’exercice, points d’attention…">${esc(c.cue || '')}</textarea>
+      <label>Lien vidéo (optionnel, commence par https://)</label><input name="url" type="url" placeholder="https://…" value="${esc(c.url || '')}">
+      <label class="check"><input type="checkbox" name="lower" ${c.lower ? 'checked' : ''}> Exercice de jambes (la charge monte de 5 kg)</label>
+      <button class="block" style="margin-top:12px">${cur ? 'Enregistrer' : 'Ajouter à ce jour'}</button>
+    </form>`;
+}
+acts.newEx = (el) => openSheet(customFormHtml(dOf(el)));
+acts.editCustom = (el) => openSheet(customFormHtml(dOf(el), eOf(el)));
+forms.customEx = (form) => {
+  const fd = new FormData(form);
+  const di = +form.dataset.d;
+  const editIdx = form.dataset.e !== undefined ? +form.dataset.e : null;
+  const sets = Math.max(1, Math.min(10, Math.round(+fd.get('sets')) || 3));
+  const lo = Math.max(1, Math.round(+fd.get('lo')) || 8);
+  const hi = Math.max(lo, Math.round(+fd.get('hi')) || 12);
+  let url = String(fd.get('url') || '').trim();
+  if (!/^https?:\/\//i.test(url)) url = ''; // on n'accepte que les vrais liens web
+  const custom = { name: String(fd.get('name')).trim().slice(0, 60), kind: fd.get('kind'), lower: !!fd.get('lower'), cue: String(fd.get('cue') || '').trim().slice(0, 400), url };
+  if (editIdx !== null) Object.assign(S.draft[di].exercises[editIdx], { sets, lo, hi, custom });
+  else S.draft[di].exercises.push({ id: `c_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, sets, lo, hi, custom });
+  closeSheet();
+  render();
+};
+acts.saveProgram = async () => {
+  const empty = S.draft.find((d) => !d.exercises.length);
+  if (empty) return toast(`« ${empty.label} » n’a aucun exercice : ajoutes-en un ou supprime ce jour.`);
+  const seen = new Set();
+  const program = S.draft.map((d) => { // deux jours ne peuvent pas porter le même nom
+    let label = d.label, n = 2;
+    while (seen.has(label)) label = `${d.label} ${n++}`;
+    seen.add(label);
+    return { ...d, label };
+  });
+  try {
+    await savePlan({ program });
+    S.draft = null;
+    toast('Programme enregistré');
+    await refresh('train');
+  } catch (e) { toast(e.message); }
+};
+acts.cancelEdit = () => { S.draft = null; location.hash = '#/train'; };
+acts.resetProgram = () => {
+  if (!confirm('Remplacer ton programme par celui de départ ? Tes modifications (dans ce brouillon) seront perdues.')) return;
+  S.draft = buildProgram(S.profile.days_per_week, S.profile.equipment);
+  render();
 };
 
 // ----- Onglet Repas -----
@@ -490,6 +651,9 @@ const CHIPS = [
 function faq(q) {
   const t = q.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const has = (...w) => w.some((x) => t.includes(x));
+  if (has('ajouter un jour', 'programme', 'personnalis', 'creer un exercice', 'ajouter un exercice', 'nouvel exercice')) {
+    return 'Dans l’onglet Séance, touche « Modifier mon programme » : tu peux ajouter, renommer, déplacer ou supprimer un jour, ajouter ou retirer des exercices (avec recherche), changer les séries et les répétitions, et créer un exercice personnalisé (nom, type, consigne, lien vidéo). Touche Enregistrer en bas pour garder tes changements.';
+  }
   if (has('exercice', 'variante', 'remplac') && has('exercice', 'seance', 'douleur', 'mal', 'blessure', 'faire')) {
     return 'Dans l’onglet Séance, touche le nom d’un exercice : tu vois la photo de départ et d’arrivée. En bas de la fiche, « voir les variantes » propose des remplacements qui travaillent les mêmes muscles. Le choix remplace l’exercice partout dans ton programme. En cas de douleur, arrête l’exercice et consulte un professionnel.';
   }
@@ -518,7 +682,8 @@ function aiContext() {
   return {
     profil: { objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm, poids_kg: lastWeight(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '' },
     nutrition: { cibles: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau }, allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, plan_de_repas: meals },
-    programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => EXERCISES[e.id].name) })),
+    programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => defOf(e).name) })),
+    guide_application_supplementaire: 'Onglet Séance > « Modifier mon programme » : on peut ajouter, renommer, déplacer ou supprimer un jour, ajouter/retirer/déplacer des exercices, changer les séries et répétitions, et créer un exercice personnalisé (nom, type charge/poids du corps/durée, consigne, lien vidéo). Ces modifications se font à la main dans l’application ; tu n’as pas à dire que c’est impossible.',
     semaine_legere: !!pl.deload,
     derniers_checkins: S.checkins.slice(-4).map(({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes }) => ({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes })),
     ajustements_du_coach: (pl.reasons || []).map((r) => r.text),
@@ -618,8 +783,8 @@ function vSettings() {
   </section>`;
 }
 
-const routes = { home: vHome, train: vTrain, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
-const TITLES = { home: 'Accueil', train: 'Entraînement', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
+const routes = { home: vHome, train: vTrain, edit: vEdit, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
+const TITLES = { home: 'Accueil', train: 'Entraînement', edit: 'Mon programme', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
 const TABS = [['home', '🏠', 'Accueil'], ['train', '🏋️', 'Séance'], ['food', '🍽️', 'Repas'], ['checkin', '📝', 'Check-in'], ['progress', '📈', 'Progrès'], ['coach', '💬', 'Coach']];
 
 // ================= Rendu =================
@@ -629,7 +794,7 @@ function render() {
   root.innerHTML = `${db.DEMO ? '<div class="demo">Mode démo : les données restent sur cet appareil</div>' : ''}
     <header><h1>${TITLES[S.view]}</h1><a href="#/settings" aria-label="Réglages">⚙️</a></header>
     <main>${routes[S.view]()}</main>
-    <nav>${TABS.map(([k, i, t]) => `<a href="#/${k}" class="${S.view === k ? 'on' : ''}"><b>${i}</b>${t}</a>`).join('')}</nav>`;
+    <nav>${TABS.map(([k, i, t]) => `<a href="#/${k}" class="${S.view === k || (k === 'train' && S.view === 'edit') ? 'on' : ''}"><b>${i}</b>${t}</a>`).join('')}</nav>`;
   hydratePhotos();
 }
 function renderAuth() {
@@ -656,6 +821,8 @@ function route() {
   S.view = routes[name] ? name : 'home';
   if (S.view !== 'train') S.dayIdx = null;
   if (S.view !== 'food') S.editPrefs = false;
+  // Le brouillon du programme n'existe que sur l'écran d'édition
+  if (S.view === 'edit') { if (!S.draft) S.draft = structuredClone(S.plan.program); } else S.draft = null;
   closeSheet();
   render();
   window.scrollTo(0, 0);
@@ -709,6 +876,8 @@ forms.profile = async (form) => {
     start_weight: +fd.start_weight, goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
+  if (old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment)
+      && !confirm('Changer les jours ou le matériel remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
   try {
     await db.saveProfile(p);
     if (!old) {
@@ -833,6 +1002,13 @@ function bindEvents(el) {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tap[data-act]')) { e.preventDefault(); e.target.click(); }
   });
   el.addEventListener('change', (e) => {
+    if (e.target.dataset.edit && S.draft) return editField(e.target);
+    // Formulaire d'exercice perso : le type change les valeurs par défaut (durée = 2 × 30-60 s)
+    if (e.target.name === 'kind' && e.target.form?.dataset.form === 'customEx' && e.target.form.dataset.e === undefined) {
+      const f = e.target.form, time = e.target.value === 'time';
+      f.sets.value = time ? 2 : 3; f.lo.value = time ? 30 : 8; f.hi.value = time ? 60 : 12;
+      return;
+    }
     const t = e.target.closest('select[data-act]');
     if (t && acts[t.dataset.act]) acts[t.dataset.act](t, e);
   });
@@ -842,6 +1018,11 @@ function bindEvents(el) {
   });
   el.addEventListener('input', (e) => {
     if (e.target.type === 'range') e.target.nextElementSibling.textContent = e.target.value + '%';
+    // Recherche dans la liste d'exercices
+    if (e.target.dataset.filter !== undefined) {
+      const q = norm(e.target.value.trim());
+      e.target.closest('.panel').querySelectorAll('[data-name]').forEach((r) => { r.hidden = !!q && !r.dataset.name.includes(q); });
+    }
   });
 }
 bindEvents(root);

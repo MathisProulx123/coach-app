@@ -63,6 +63,12 @@ Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_0
 
 Dans l'onglet **Séance**, touche un exercice : tu vois la photo de départ et d'arrivée et une consigne. « Voir les variantes » propose des remplacements qui travaillent les mêmes muscles, et le choix s'applique à tout ton programme. Les photos viennent de la base libre [Free Exercise DB](https://github.com/yuhonas/free-exercise-db) (domaine public).
 
+## Modifier ton programme
+
+Onglet **Séance → Modifier mon programme** : tu peux ajouter, renommer, déplacer ou supprimer un jour, ajouter des exercices de la bibliothèque (avec recherche) ou en créer de zéro (nom, type charge / poids du corps / durée, consigne, lien vidéo), les retirer ou les déplacer, et changer les séries et répétitions. Tout se fait en brouillon : rien n'est gardé avant de toucher **Enregistrer**. « Rétablir le programme de départ » recrée le programme selon ton profil.
+
+Attention : changer les jours par semaine ou le matériel dans les Réglages recrée le programme de départ (l'app te le demande avant).
+
 ## Le plan de repas
 
 Dans l'onglet **Repas**, l'app pose d'abord tes allergies, ton régime et ce que tu n'aimes pas, puis crée de vrais repas (aliments, quantités, marques) qui atteignent tes cibles de calories, protéines, glucides et lipides. Tu peux échanger un aliment (↔), refaire un repas, modifier tes cibles à la main ou voir la liste d'épicerie de la semaine. Les quantités se recalculent automatiquement quand le coach change tes calories.
