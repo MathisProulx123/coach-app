@@ -153,7 +153,7 @@ export async function searchFoods(query) {
     const { searchFoods: direct } = await import('./foodsearch.js');
     return direct(query); // pas de fonction serveur en mode démo : recherche directe, meilleur effort
   }
-  const { data, error } = await sb.functions.invoke('food-search', { body: { q: query } });
+  const { data, error } = await sb.functions.invoke(CONFIG.FOOD_SEARCH_FUNCTION, { body: { q: query } });
   if (error) throw await edgeError(error);
   return data?.results ?? [];
 }

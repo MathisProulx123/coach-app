@@ -17,16 +17,21 @@ Deno.serve(async (req) => {
     if (query.length < 2) return new Response(JSON.stringify({ results: [] }), { headers: { ...cors, 'Content-Type': 'application/json' } });
 
     const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&lc=fr&fields=product_name,product_name_fr,brands,nutriments,code`;
-    const r = await fetch(url, {
-      headers: {
-        // Open Food Facts demande un User-Agent identifiable pour les appels API (voir leurs conditions d'usage).
-        'User-Agent': 'CoachApp-PersonalProject/1.0 (usage personnel, deux utilisateurs)',
-        Accept: 'application/json',
-      },
-    });
-    const ct = r.headers.get('content-type') || '';
-    if (!r.ok || !ct.includes('json')) throw new Error('Open Food Facts est momentanément indisponible, réessaie dans un instant.');
-    const j = await r.json();
+    // Open Food Facts bloque parfois les appels en période de forte demande : on réessaie 2 fois avant d'abandonner.
+    let j = null;
+    for (let attempt = 0; attempt < 3 && !j; attempt++) {
+      if (attempt) await new Promise((res) => setTimeout(res, 800 * attempt));
+      const r = await fetch(url, {
+        headers: {
+          // Open Food Facts demande un User-Agent identifiable pour les appels API (voir leurs conditions d'usage).
+          'User-Agent': 'CoachApp-PersonalProject/1.0 (usage personnel, deux utilisateurs)',
+          Accept: 'application/json',
+        },
+      });
+      const ct = r.headers.get('content-type') || '';
+      if (r.ok && ct.includes('json')) j = await r.json();
+    }
+    if (!j) throw new Error('Open Food Facts est momentanément indisponible, réessaie dans un instant.');
 
     const results = [];
     for (const p of j.products || []) {
