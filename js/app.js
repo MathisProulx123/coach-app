@@ -2,7 +2,7 @@ import * as db from './db.js';
 import { CONFIG } from './config.js';
 import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight } from './util.js';
 import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
-import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant } from './rules.js';
+import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus } from './rules.js';
 import { ALLERGENS, DIETS, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 
@@ -50,7 +50,7 @@ async function ensureMealPlan() {
     S.plan = await db.getPlan(S.me.id);
   }
 }
-const prefs = () => ({ allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', ...(S.profile?.food_prefs || {}) });
+const prefs = () => ({ allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '', ...(S.profile?.food_prefs || {}) });
 const wUnit = (p = S.profile) => (p?.food_prefs?.weight_unit) || 'kg';
 const wTxt = (kg, p = S.profile) => `${fmtWeight(kg, wUnit(p))} ${wUnit(p)}`;
 async function setFoodPrefs(patch) {
@@ -60,6 +60,8 @@ async function setFoodPrefs(patch) {
 }
 // Semaine personnelle : commence le jour du tout premier check-in de la personne (pas le lundi civil).
 const curWeek = (checkins) => weekStartFor(today(), checkins[0]?.week_start);
+// Le poids et la date visés vivent dans food_prefs ; les règles du coach (rules.js) les attendent à plat sur le profil.
+const profileWithGoal = () => ({ ...S.profile, goal_weight_kg: prefs().goal_weight, goal_date: prefs().goal_date });
 
 // ================= Petits helpers d'affichage =================
 function toast(msg) {
@@ -156,6 +158,26 @@ function closeSheet() {
 }
 acts.closeSheet = closeSheet;
 
+// Carte « objectif » sur l'accueil : n'apparaît que si un poids et une date visés sont fixés (Réglages).
+function goalCardHtml() {
+  const g = goalStatus(profileWithGoal(), lastWeight());
+  if (!g) return '';
+  const pr = prefs(), u = wUnit();
+  const dateTxt = new Date(pr.goal_date + 'T12:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (g.done && g.reached) return `<section class="card"><h2>🎉 Objectif atteint</h2><p>Tu es à ton poids visé (${fmtWeight(pr.goal_weight, u)} ${u}). Fixe un nouveau poids ou une nouvelle date dans Réglages si tu veux continuer.</p></section>`;
+  if (g.done) return `<section class="card"><h2>📅 Date visée dépassée</h2><p>Il reste ${fmtWeight(Math.abs(g.gap), u)} ${u} pour atteindre ${fmtWeight(pr.goal_weight, u)} ${u}. Choisis une nouvelle date dans Réglages.</p></section>`;
+  return `
+  <section class="card">
+    <h2>🎯 Objectif</h2>
+    <p>${fmtWeight(pr.goal_weight, u)} ${u} d’ici le ${dateTxt} <span class="muted">(${g.weeksLeft} sem.)</span></p>
+    <div class="grid2">
+      <div class="stat"><b>${fmtWeight(Math.abs(g.gap), u)} ${u}</b><span>${g.gap < 0 ? 'à perdre' : 'à prendre'}</span></div>
+      <div class="stat"><b>${g.neededPercent > 0 ? '+' : ''}${g.neededPercent} %</b><span>par semaine nécessaire</span></div>
+    </div>
+    <p class="muted">${g.realistic ? 'Rythme sûr pour ta date : le coach s’en sert pour ajuster tes calories.' : `Cette date demande un rythme plus rapide que ce qui est sûr. De façon réaliste, compte plutôt jusqu’au ${new Date(Date.now() + g.realisticDays * 864e5).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' })}.`}</p>
+  </section>`;
+}
+
 // ================= Écrans =================
 function vHome() {
   const p = S.profile, plan = S.plan, wk = curWeek(S.checkins);
@@ -187,6 +209,7 @@ function vHome() {
       ? '<a class="btn ghost block" href="#/food">Voir mes repas</a>'
       : '<a class="btn block" href="#/food">Créer mon plan de repas (2 min)</a>'}
   </section>
+  ${goalCardHtml()}
   ${msgs.length ? `<section class="card"><h2>Le coach</h2>${msgs.map((m) => `<div class="msg"><span>${m.icon}</span><span>${esc(m.text)}</span></div>`).join('')}</section>` : ''}
   <section class="card">
     <h2>${o ? esc(o.profile.name) : 'Ton ami'}</h2>
@@ -749,6 +772,7 @@ function aiContext() {
     profil: {
       objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
       poids_kg: lastWeight(), unite_poids_affichee: wUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
+      objectif_chiffre: goalStatus(profileWithGoal(), lastWeight()) ?? 'aucun poids/date visés fixés',
     },
     nutrition: {
       cibles_moyennes_semaine: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau },
@@ -843,6 +867,7 @@ forms.chat = async (form) => {
 
 function profileForm(p = {}, label = 'Enregistrer') {
   const opt = (v, t, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+  const pr = prefs();
   return `
   <form data-form="profile" class="card">
     <label>Prénom</label><input name="name" required value="${esc(p.name ?? '')}">
@@ -853,6 +878,11 @@ function profileForm(p = {}, label = 'Enregistrer') {
       <div><label>Poids actuel (${wUnit(p)})</label><input name="start_weight" type="number" step="0.1" min="15" max="550" required value="${p.start_weight != null ? fmtWeight(p.start_weight, wUnit(p)) : ''}"></div>
     </div>
     <label>Objectif</label><select name="goal">${Object.entries(GOALS).map(([k, v]) => opt(k, v, p.goal)).join('')}</select>
+    <div class="grid2">
+      <div><label>Poids visé (optionnel, ${wUnit(p)})</label><input name="goal_weight" type="number" step="0.1" min="15" max="550" value="${pr.goal_weight != null ? fmtWeight(pr.goal_weight, wUnit(p)) : ''}"></div>
+      <div><label>Date visée (optionnel)</label><input name="goal_date" type="date" value="${pr.goal_date || ''}"></div>
+    </div>
+    <p class="muted">Avec les deux, le coach calcule le rythme nécessaire (jamais plus vite qu’un rythme sûr) et te montre où tu en es.</p>
     <div class="grid2">
       <div><label>Jours d’entraînement / semaine</label><select name="days_per_week">${[2, 3, 4, 5, 6].map((n) => opt(String(n), n, String(p.days_per_week ?? 4))).join('')}</select></div>
       <div><label>Matériel</label><select name="equipment">${opt('gym', 'Salle de sport', p.equipment)}${opt('home', 'Maison (haltères)', p.equipment)}</select></div>
@@ -984,6 +1014,7 @@ forms.profile = async (form) => {
     start_weight: toKg(+fd.start_weight, wUnit(old)), goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
+  p.food_prefs = { ...prefs(), goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, wUnit(old)) : null, goal_date: fd.goal_date || '' };
   if (old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment)
       && !confirm('Changer les jours ou le matériel remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
   try {
@@ -1013,7 +1044,8 @@ forms.profile = async (form) => {
 
 forms.food = async (form) => {
   const fd = new FormData(form);
-  const pr = { allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), done: true };
+  // On repart des préférences actuelles pour ne pas effacer l'eau, l'unité de poids ou l'objectif chiffré.
+  const pr = { ...prefs(), allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), done: true };
   try {
     await db.saveProfile({ ...S.profile, food_prefs: pr });
     S.profile = { ...S.profile, food_prefs: pr };
@@ -1093,7 +1125,7 @@ forms.checkin = async (form) => {
       notes: fd.get('notes') || '', photos,
     };
     const all = [...S.checkins.filter((x) => x.week_start !== wk), c].sort((a, b) => (a.week_start > b.week_start ? 1 : -1));
-    const res = weeklyAdjust({ profile: S.profile, plan: S.plan, checkins: all });
+    const res = weeklyAdjust({ profile: profileWithGoal(), plan: S.plan, checkins: all });
     c.coach = { messages: res.messages, deload: res.deload };
     await db.saveCheckin(c);
     await savePlan({ calories: res.calories, protein: res.protein, carbs: res.carbs, fat: res.fat, deload: res.deload, hold: res.hold, reasons: res.messages });

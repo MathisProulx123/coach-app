@@ -29,7 +29,7 @@ export const RULES = {
   dayCycle: { trainCarbFactor: 1.20, restCarbFactor: 0.80 },
 };
 
-import { daysBetween, roundHalf, round1 } from './util.js';
+import { daysBetween, roundHalf, round1, today } from './util.js';
 
 export const ageOf = (p) => new Date().getFullYear() - p.birth_year;
 
@@ -72,6 +72,41 @@ export function calcTargets(p, kg) {
   return macros(p, kg, cal);
 }
 
+// Si la personne a fixé un poids et une date visés, calcule le rythme hebdomadaire nécessaire pour les atteindre,
+// borné à un rythme sûr (jamais plus agressif que RULES.weeklyRate). Sinon, la fourchette générique par défaut.
+export function targetWindow(profile, kg) {
+  const generic = RULES.weeklyRate[profile.goal];
+  if (!profile.goal_weight_kg || !profile.goal_date) return generic;
+  const weeksLeft = Math.max(daysBetween(today(), profile.goal_date), 1) / 7;
+  const neededPercent = (((profile.goal_weight_kg - kg) / kg) * 100) / weeksLeft;
+  const safe = Math.max(generic.min, Math.min(generic.max, neededPercent));
+  return { min: safe - 0.1, max: safe + 0.1 };
+}
+
+// Résumé de la progression vers un poids et une date visés, pour l'afficher à la personne.
+// Renvoie null si aucun objectif chiffré n'est fixé.
+export function goalStatus(profile, kg) {
+  if (!profile.goal_weight_kg || !profile.goal_date) return null;
+  const gap = round1(profile.goal_weight_kg - kg);
+  if (Math.abs(gap) < 0.3) return { done: true, reached: true, gap };
+  const daysLeft = daysBetween(today(), profile.goal_date);
+  if (daysLeft <= 0) return { done: true, reached: false, gap, daysLeft };
+  const weeksLeft = daysLeft / 7;
+  const neededPercent = ((gap / kg) * 100) / weeksLeft;
+  const generic = RULES.weeklyRate[profile.goal];
+  const safePercent = Math.max(generic.min, Math.min(generic.max, neededPercent));
+  const realistic = Math.abs(neededPercent - safePercent) < 0.05;
+  let realisticDays = daysLeft;
+  if (!realistic) {
+    const weeksNeeded = Math.abs(gap) / ((Math.abs(safePercent) / 100) * kg);
+    realisticDays = Math.round(weeksNeeded * 7);
+  }
+  return {
+    done: false, gap, daysLeft, weeksLeft: Math.round(weeksLeft),
+    neededPercent: round1(neededPercent), realistic, realisticDays,
+  };
+}
+
 // Ajustement de la semaine, calculé après chaque check-in.
 // checkins = tous les check-ins triés du plus ancien au plus récent (le dernier = celui de cette semaine).
 export function weeklyAdjust({ profile, plan, checkins }) {
@@ -87,7 +122,7 @@ export function weeklyAdjust({ profile, plan, checkins }) {
     const weeks = Math.max(1, daysBetween(prev.week_start, cur.week_start) / 7);
     rate = ((cur.weight - prev.weight) / prev.weight) * 100 / weeks;
   }
-  const target = RULES.weeklyRate[profile.goal];
+  const target = targetWindow(profile, kg);
   const pct = rate === null ? null : `${rate > 0 ? '+' : ''}${round1(rate)} %/sem`;
 
   if (rate === null) {
@@ -126,7 +161,24 @@ export function weeklyAdjust({ profile, plan, checkins }) {
   if (hold) messages.push({ icon: '🏋️', text: `Séances faites à ${cur.adherence_training} % : on ne monte pas les charges cette semaine. Vise au moins ${RULES.minTrainingAdherence} % des séances.` });
   else if (!deload) messages.push({ icon: '📈', text: 'Charges : quand toutes les séries atteignent le haut de la fourchette de reps, la charge monte la séance suivante.' });
 
-  return { ...macros(profile, kg, cal), deload, hold, messages };
+  // 4) Objectif chiffré (poids + date), si fixé
+  const goal = goalStatus(profile, kg);
+  if (goal?.done && goal.reached) messages.push({ icon: '🎉', text: `Tu es à ton poids visé (${profile.goal_weight_kg} kg) !` });
+  else if (goal?.done) messages.push({ icon: '📅', text: `La date visée est passée : il te reste ${Math.abs(goal.gap)} kg. Choisis une nouvelle date dans ton profil.` });
+  else if (goal) {
+    const fmtLong = (d) => d.toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' });
+    const rythme = goal.realistic
+      ? `au rythme actuel, c’est atteignable.`
+      : `ce rythme dépasse ce qui est sûr ; de façon réaliste, compte plutôt jusqu’au ${fmtLong(new Date(Date.now() + goal.realisticDays * 864e5))}.`;
+    messages.push({ icon: '🎯', text: `Objectif : ${profile.goal_weight_kg} kg d’ici le ${fmtLong(new Date(profile.goal_date + 'T12:00:00'))} (${goal.weeksLeft} sem.). Il reste ${Math.abs(goal.gap)} kg, soit ${goal.neededPercent > 0 ? '+' : ''}${goal.neededPercent} %/sem nécessaire — ${rythme}` });
+  }
+
+  // Protéines et lipides restent ceux du plan actuel (par défaut ou modifiés à la main) : seules les calories
+  // bougent selon le poids, et les glucides s'ajustent pour combler le reste.
+  const protein = plan.protein;
+  const fat = plan.fat;
+  const carbs = Math.max(0, Math.round((cal - protein * 4 - fat * 9) / 4));
+  return { calories: cal, protein, carbs, fat, deload, hold, messages };
 }
 
 // Objectif de la prochaine séance pour un exercice, selon la dernière fois.
