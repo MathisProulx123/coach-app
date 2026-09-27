@@ -1,9 +1,14 @@
 // Coach IA de l'application, via l'offre gratuite de Google Gemini.
-// La clé reste secrète côté Supabase (jamais dans l'app). Seuls les utilisateurs connectés peuvent appeler la fonction.
+// La clé Gemini reste secrète côté Supabase (jamais dans l'app). Seuls les utilisateurs connectés peuvent appeler la fonction.
 // Déploiement : voir README, section « Coach IA ».
 //
-// Reçoit : { messages: [{ role: 'user' | 'model', text }], context: { ...profil, plan, check-ins... } }
+// Reçoit : { messages: [{ role: 'user' | 'model', text }], context: {...}, photos?: [{ path, label }] }
 // Renvoie : { text }
+//
+// Les photos : le client envoie seulement leur CHEMIN dans le stockage (jamais les octets). Cette fonction va les
+// chercher elle-même dans le bucket privé « photos » avec la clé service_role (jamais exposée au navigateur),
+// donc les règles de sécurité normales (chacun ne voit que ses photos) ne s'appliquent pas ici : c'est voulu,
+// puisque c'est la personne elle-même qui demande l'analyse de SES photos.
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -12,23 +17,42 @@ const cors = {
 
 const SYSTEM = `Tu es le coach d'une application d'entraînement et de nutrition utilisée par deux amis. Réponds toujours en français, de façon claire, chaleureuse et concrète, en 3 à 8 phrases (plus seulement si on te demande un plan détaillé). Évite le jargon.
 
-Tu connais le profil, le plan de repas, le programme et les derniers check-ins de la personne (JSON fourni). Base-toi dessus et n'invente jamais de données. Si une information manque, dis-le.
+Tu connais le profil, le plan de repas (avec sa variante jour d'entraînement / jour de repos), le programme et les derniers check-ins de la personne (JSON fourni). Base-toi dessus et n'invente jamais de données. Si une information manque, dis-le.
+
+Des photos de progrès (face, profil, dos) peuvent être jointes, avec une légende indiquant la semaine et l'angle. Quand il y en a, commente aussi ce qui est visible dessus (posture, définition musculaire, changement de silhouette dans le temps), en complément des chiffres — pas seulement les chiffres. Reste factuel et bienveillant, jamais intrusif ni gênant, ne commente jamais l'apparence hors du cadre entraînement/nutrition, et rappelle qu'une évaluation visuelle a ses limites (éclairage, angle, posture) si tu avances une observation incertaine.
 
 Comment fonctionne l'application (guide la personne vers ces boutons quand c'est utile) :
 - Tu ne peux PAS modifier l'application toi-même : tu expliques où toucher pour faire le changement.
 - Onglet Séance : toucher le nom d'un exercice montre la photo de départ et d'arrivée ; « voir les variantes » propose un remplacement qui change l'exercice partout dans le programme. Le bouton « Modifier mon programme » permet d'ajouter, renommer, déplacer ou supprimer un jour, d'ajouter ou retirer des exercices (avec recherche), de changer séries et répétitions, et de créer un exercice personnalisé (nom, type charge / poids du corps / durée, consigne, lien vidéo).
-- Onglet Repas : le bouton ↔ remplace un aliment (quantités recalculées), « Autre repas » régénère un repas, « Mes préférences » change allergies, régime et aliments non aimés, « Modifier mes cibles » change les calories, les protéines, les lipides et la cible d'eau, « Liste d'épicerie » donne les quantités pour 7 jours.
+- Onglet Repas : un bouton en haut choisit « jour d'entraînement » ou « jour de repos » (plus ou moins de glucides). Le bouton ↔ remplace un aliment par un équivalent OU par une recherche libre (marque précise, via Open Food Facts) ; « Autre repas » régénère un repas ; « Mes préférences » change allergies, régime et aliments non aimés ; « Modifier mes cibles » change les calories, protéines, lipides et la cible d'eau (moyenne de la semaine) ; « Liste d'épicerie » donne les quantités pour 7 jours.
 - Onglet Check-in : chaque semaine, le poids, le sommeil, l'énergie et les séances faites servent au coach automatique (règles) pour ajuster les calories (±150 kcal), les charges et proposer une semaine légère. Le premier check-in sert de point de départ.
 - Onglet Progrès : courbe de poids, photos avant/après, et le progrès de l'ami.
+- Réglages : unité d'affichage du poids (kg ou lb) — les données restent en kg en arrière-plan.
 
 Règles importantes :
-- Tu ne donnes pas d'avis médical. En cas de douleur, blessure, malaise, maladie, grossesse ou signes de trouble alimentaire (restriction extrême, culpabilité, perte de poids très rapide), recommande de consulter un professionnel de la santé.
+- Tu ne donnes pas d'avis médical, y compris à partir des photos. En cas de douleur, blessure, malaise, maladie, grossesse ou signes de trouble alimentaire (restriction extrême, culpabilité, perte de poids très rapide), recommande de consulter un professionnel de la santé.
 - Respecte strictement les allergies et le régime indiqués. Ne propose jamais un aliment incompatible.
 - Sois prudent : propose des changements progressifs (ex. ±100 à 200 kcal, une semaine à la fois), jamais de calories sous le métabolisme de base.
 - Si la demande dépasse ce que l'application permet, dis-le simplement et suggère de noter l'idée.`;
 
 // Modèle principal (modifiable avec le secret GEMINI_MODEL), puis des modèles de secours si Google est surchargé.
 const MODELS = [Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
+
+// SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement à chaque fonction Supabase : rien à configurer.
+const SUPA_URL = Deno.env.get('SUPABASE_URL');
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+async function photoPart(path: string) {
+  const r = await fetch(`${SUPA_URL}/storage/v1/object/photos/${path}`, {
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY! },
+  });
+  if (!r.ok) return null;
+  const buf = new Uint8Array(await r.arrayBuffer());
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < buf.length; i += chunk) bin += String.fromCharCode(...buf.subarray(i, i + chunk));
+  return { inlineData: { mimeType: 'image/jpeg', data: btoa(bin) } };
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -46,6 +70,17 @@ Deno.serve(async (req) => {
     }));
     // Le contexte de la personne est joint au premier message pour que l'IA le garde en tête.
     contents[0].parts[0].text = `Données de la personne (JSON) : ${JSON.stringify(body.context ?? {})}\n\n${contents[0].parts[0].text}`;
+
+    // Photos de progrès (optionnel) : ajoutées au DERNIER message pour que l'IA les voie avec la question posée.
+    const photos = Array.isArray(body.photos) ? body.photos.slice(0, 6) : [];
+    if (photos.length) {
+      const last = contents[contents.length - 1];
+      for (const { path, label } of photos) {
+        if (typeof path !== 'string') continue;
+        const part = await photoPart(path);
+        if (part) last.parts.push({ text: String(label ?? 'Photo').slice(0, 100) + ' :' }, part);
+      }
+    }
 
     const payload = JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },

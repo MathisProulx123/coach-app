@@ -25,6 +25,24 @@ export const round1 = (n) => Math.round(n * 10) / 10;
 export const roundHalf = (n) => Math.round(n * 2) / 2;
 export const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
+// Semaine personnelle : la première semaine de quelqu'un commence le jour de son tout premier check-in,
+// pas au lundi civil. Les semaines suivantes s'enchaînent ensuite tous les 7 jours à partir de là.
+// anchor = week_start du tout premier check-in (ou undefined si la personne n'en a encore aucun).
+export const weekStartFor = (dateStr, anchor) => {
+  if (!anchor) return dateStr; // pas encore de première semaine : elle commence aujourd'hui
+  const n = Math.floor(daysBetween(anchor, dateStr) / 7);
+  return addDays(anchor, n * 7);
+};
+
+// Conversion de poids : les données restent en kg partout dans l'app et la base de données ;
+// seul l'affichage change selon l'unité choisie par la personne.
+export const KG_PER_LB = 0.45359237;
+export const kgToLb = (kg) => kg / KG_PER_LB;
+export const lbToKg = (lb) => lb * KG_PER_LB;
+export const toKg = (val, unit) => (unit === 'lb' ? lbToKg(val) : val);
+export const fromKg = (kg, unit) => (unit === 'lb' ? kgToLb(kg) : kg);
+export const fmtWeight = (kg, unit) => round1(fromKg(kg, unit));
+
 // Réduit une photo (max 1200 px, JPEG) pour rester dans le stockage gratuit.
 export function resizeImage(file, max = 1200, quality = 0.8) {
   return new Promise((resolve, reject) => {

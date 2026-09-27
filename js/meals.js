@@ -1,7 +1,7 @@
 // Génère un vrai plan de repas à partir de tes cibles (calories, protéines, glucides, lipides).
 // On mémorise seulement les CHOIX d'aliments (« choices ») ; les quantités sont recalculées à chaque affichage,
 // donc quand le coach change tes calories après un check-in, tes repas s'ajustent automatiquement.
-import { FOODS, FOOD_BY_ID, allowed } from './foods.js';
+import { FOODS, FOOD_BY_ID, allowed, resolveFood } from './foods.js';
 
 export const SLOT_NAMES = { dej: 'Déjeuner', din: 'Dîner', col: 'Collation', col2: 'Collation', sou: 'Souper' };
 
@@ -101,10 +101,19 @@ export function equivalents(choices, slotIdx, itemIdx, prefs) {
   return candidates(it.role, meal.slot, prefs).filter((f) => f.id !== it.food);
 }
 
+// Remplace un aliment par un autre de la liste curatée (perd tout aliment personnalisé précédent à cette place).
 export function swapItem(choices, slotIdx, itemIdx, foodId) {
   return {
     ...choices,
-    meals: choices.meals.map((m, i) => (i !== slotIdx ? m : { ...m, items: m.items.map((it, j) => (j === itemIdx ? { ...it, food: foodId } : it)) })),
+    meals: choices.meals.map((m, i) => (i !== slotIdx ? m : { ...m, items: m.items.map((it, j) => (j === itemIdx ? { role: it.role, food: foodId } : it)) })),
+  };
+}
+
+// Remplace un aliment par un résultat de recherche externe (aliment « personnalisé », voir foods.js:externalFood).
+export function swapItemCustom(choices, slotIdx, itemIdx, customFood) {
+  return {
+    ...choices,
+    meals: choices.meals.map((m, i) => (i !== slotIdx ? m : { ...m, items: m.items.map((it, j) => (j === itemIdx ? { role: it.role, food: customFood.id, custom: customFood } : it)) })),
   };
 }
 
@@ -182,7 +191,7 @@ export function computeDay(targets, choices, prefs = {}) {
 
   const build = (meal, T, keys) => {
     const items = meal.items.map((it) => {
-      const food = FOOD_BY_ID[it.food];
+      const food = resolveFood(it.food, it.custom);
       let fixed = null;
       if (it.role === 'veg') fixed = VEG_GRAMS;
       if (it.role === 'fruit') fixed = food.unit ? food.unit.g : 100;
@@ -228,7 +237,42 @@ export function computeDay(targets, choices, prefs = {}) {
     const items = build(meal, { k: rest.k * r, p: rest.p * r, c: rest.c * r, f: rest.f * r }, ['p', 'c', 'f']);
     out[i] = { slot: meal.slot, items, totals: total(items) };
   });
+  finishDay(out, targets);
   return { meals: out, totals: out.reduce((s, m) => add(s, m.totals), ZERO) };
+}
+
+// Dernière retouche : ajuste UN aliment à quantité continue par macro (protéines, glucides, lipides)
+// pour que le total du jour colle à quelques grammes près à la cible exacte (ex. « 200 g de protéines »),
+// même après un échange d'aliment ou un changement de cible. Ignore les aliments à unité entière
+// (œufs, tranches de pain…) pour ne pas afficher des quantités bizarres comme « 2,3 œufs ».
+const ROLE_OF_MACRO = { p: 'protein', c: 'carb', f: 'fat' };
+const TARGET_KEY = { p: 'protein', c: 'carbs', f: 'fat' };
+function finishDay(mealsOut, targets) {
+  for (const key of ['p', 'c', 'f']) {
+    let residual = targets[TARGET_KEY[key]] - mealsOut.reduce((s, m) => add(s, m.totals), ZERO)[key];
+    if (Math.abs(residual) < 1.5) continue;
+    // Tous les aliments ajustables (quantité continue) pour ce macro, du plus de marge au moins de marge :
+    // si un seul ne suffit pas à absorber l'écart (plafond atteint), on complète avec le suivant.
+    const candidates = [];
+    for (const m of mealsOut) for (const it of m.items) {
+      if (it.role !== ROLE_OF_MACRO[key] || (it.food.unit && it.food.unit.whole)) continue;
+      const room = residual > 0 ? (it.food.max ?? 600) - it.g : it.g;
+      if (room > 3) candidates.push({ meal: m, item: it });
+    }
+    candidates.sort((a, b) => (residual > 0 ? (b.item.food.max ?? 600) - b.item.g - ((a.item.food.max ?? 600) - a.item.g) : b.item.g - a.item.g));
+    for (const { meal, item } of candidates) {
+      if (Math.abs(residual) < 1.5) break;
+      const per = item.food.per100[key] / 100;
+      if (per <= 0) continue;
+      const room = residual > 0 ? (item.food.max ?? 600) - item.g : item.g;
+      const deltaG = Math.max(-room, Math.min(room, residual / per));
+      const before = item.macros[key];
+      const p = practical(item.food, item.g + deltaG, item.role);
+      Object.assign(item, { g: p.g, units: p.units ?? null, macros: macrosOf(item.food, p.g) });
+      meal.totals = meal.items.reduce((s, x) => add(s, x.macros), ZERO);
+      residual -= item.macros[key] - before;
+    }
+  }
 }
 
 // Liste d'épicerie pour N jours
@@ -241,6 +285,7 @@ export function groceryList(computed, days = 7) {
   return Object.values(acc).map(({ food, g }) => {
     if (food.id === 'avocat') return { name: food.name, text: `${Math.ceil(g / 150)} ×`, brands: food.brands };
     if (food.unit && food.unit.whole && food.unit.g > 5) return { name: food.name, text: `${Math.round(g / food.unit.g)} ×`, brands: food.brands };
+    if (food.external) return { name: food.name, text: `≈ ${Math.round(g / 50) * 50} g`, brands: food.brands };
     const r = Math.round(g / 50) * 50;
     return { name: food.name, text: r >= 1000 ? `${String(r / 1000).replace('.', ',')} kg` : `${r} g`, brands: food.brands };
   }).sort((a, b) => a.name.localeCompare(b.name, 'fr'));

@@ -1,10 +1,11 @@
 import * as db from './db.js';
 import { CONFIG } from './config.js';
-import { esc, today, mondayOf, addDays, fmtDate, round1, avg, resizeImage } from './util.js';
+import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight } from './util.js';
 import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
-import { calcTargets, weeklyAdjust, nextTarget, extraTargets } from './rules.js';
-import { ALLERGENS, DIETS } from './foods.js';
-import { buildChoices, rerollMeal, equivalents, swapItem, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant } from './rules.js';
+import { ALLERGENS, DIETS, externalFood } from './foods.js';
+import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { searchFoods } from './foodsearch.js';
 
 const S = {
   me: null, profile: null, plan: null, workouts: [], daily: [], checkins: [], other: null,
@@ -50,7 +51,16 @@ async function ensureMealPlan() {
     S.plan = await db.getPlan(S.me.id);
   }
 }
-const prefs = () => ({ allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, ...(S.profile?.food_prefs || {}) });
+const prefs = () => ({ allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', ...(S.profile?.food_prefs || {}) });
+const wUnit = (p = S.profile) => (p?.food_prefs?.weight_unit) || 'kg';
+const wTxt = (kg, p = S.profile) => `${fmtWeight(kg, wUnit(p))} ${wUnit(p)}`;
+async function setFoodPrefs(patch) {
+  const food_prefs = { ...prefs(), ...patch };
+  await db.saveProfile({ ...S.profile, food_prefs });
+  S.profile = { ...S.profile, food_prefs };
+}
+// Semaine personnelle : commence le jour du tout premier check-in de la personne (pas le lundi civil).
+const curWeek = (checkins) => weekStartFor(today(), checkins[0]?.week_start);
 
 // ================= Petits helpers d'affichage =================
 function toast(msg) {
@@ -76,21 +86,22 @@ const findEntry = (id) => S.plan.program.flatMap((d) => d.exercises).find((e) =>
 const defById = (id) => EXERCISES[id] || customDef(findEntry(id)?.custom);
 const m1 = (n) => Math.round(n);
 
-function lineChart(points) {
+function lineChart(points, unit = 'kg') {
   if (points.length < 2) return '<p class="muted">Pas encore assez de données (2 check-ins minimum).</p>';
+  const pts = points.map((p) => ({ d: p.d, y: fromKg(p.y, unit) }));
   const W = 320, H = 150, P = 26;
-  const ys = points.map((p) => p.y);
+  const ys = pts.map((p) => p.y);
   const lo = Math.min(...ys) - 0.5, hi = Math.max(...ys) + 0.5;
-  const x = (i) => P + (i * (W - 2 * P)) / (points.length - 1);
+  const x = (i) => P + (i * (W - 2 * P)) / (pts.length - 1);
   const y = (v) => H - P - ((v - lo) / (hi - lo)) * (H - 2 * P);
-  const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
-  const dots = points.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="3.5" fill="var(--accent)"/>`).join('');
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
+  const dots = pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="3.5" fill="var(--accent)"/>`).join('');
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Courbe de poids">
     <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>${dots}
-    <text x="${P}" y="${H - 6}" font-size="10" fill="var(--muted)">${fmtDate(points[0].d)}</text>
-    <text x="${W - P}" y="${H - 6}" font-size="10" fill="var(--muted)" text-anchor="end">${fmtDate(points[points.length - 1].d)}</text>
-    <text x="${P}" y="14" font-size="11" fill="var(--muted)">${round1(hi - 0.5)} kg</text>
-    <text x="${P}" y="${H - 16}" font-size="11" fill="var(--muted)">${round1(lo + 0.5)} kg</text></svg>`;
+    <text x="${P}" y="${H - 6}" font-size="10" fill="var(--muted)">${fmtDate(pts[0].d)}</text>
+    <text x="${W - P}" y="${H - 6}" font-size="10" fill="var(--muted)" text-anchor="end">${fmtDate(pts[pts.length - 1].d)}</text>
+    <text x="${P}" y="14" font-size="11" fill="var(--muted)">${round1(hi - 0.5)} ${unit}</text>
+    <text x="${P}" y="${H - 16}" font-size="11" fill="var(--muted)">${round1(lo + 0.5)} ${unit}</text></svg>`;
 }
 
 function nextDayIdx() {
@@ -110,10 +121,13 @@ function lastWeight() {
   const c = S.checkins[S.checkins.length - 1];
   return c ? c.weight : S.profile.start_weight;
 }
+function todayLog() { return S.daily.find((d) => d.date === today()) || {}; }
+// Cibles du jour selon qu'aujourd'hui est un jour d'entraînement ou de repos (choix mémorisé dans le journal du jour).
+function curDayTargets() { return dayVariant(S.plan, todayLog().day_type === 'rest' ? 'rest' : 'train'); }
 function statsOf(d) {
   const first = d.checkins[0]?.weight ?? d.profile.start_weight;
   const last = d.checkins[d.checkins.length - 1]?.weight ?? first;
-  const wk = mondayOf();
+  const wk = curWeek(d.checkins);
   const weeks = new Set(d.checkins.map((c) => c.week_start));
   let streak = 0;
   let w = weeks.has(wk) ? wk : addDays(wk, -7);
@@ -145,7 +159,7 @@ acts.closeSheet = closeSheet;
 
 // ================= Écrans =================
 function vHome() {
-  const p = S.profile, plan = S.plan, wk = mondayOf();
+  const p = S.profile, plan = S.plan, wk = curWeek(S.checkins);
   const done = S.checkins.some((c) => c.week_start === wk);
   const idx = nextDayIdx();
   const day = plan.program[idx];
@@ -179,7 +193,7 @@ function vHome() {
     <h2>${o ? esc(o.profile.name) : 'Ton ami'}</h2>
     ${o
       ? `<div class="grid4"><div class="stat"><b>${os.week}</b><span>séances / sem.</span></div>
-         <div class="stat"><b>${os.change > 0 ? '+' : ''}${os.change}</b><span>kg</span></div>
+         <div class="stat"><b>${os.change > 0 ? '+' : ''}${fmtWeight(os.change, wUnit(o.profile))}</b><span>${wUnit(o.profile)}</span></div>
          <div class="stat"><b>${os.streak}</b><span>sem. d’affilée</span></div>
          <div class="stat"><b>${os.adh ?? '–'}${os.adh === null ? '' : '%'}</b><span>régularité</span></div></div>
          <a class="btn ghost block" style="margin-top:10px" href="#/progress" data-act="seeOther">Voir son progrès</a>`
@@ -444,25 +458,35 @@ function foodPrefsForm(pr, first) {
 
 function vFood() {
   const pl = S.plan, pr = prefs();
-  const log = S.daily.find((d) => d.date === today()) || {};
+  const log = todayLog();
   if (!pr.done) return foodPrefsForm(pr, true);
   if (S.editPrefs) return foodPrefsForm(pr, false);
-  const cd = computeDay(pl, pl.meal_plan, pr);
-  const ex = extraTargets(pl.calories, lastWeight());
+  const dayType = log.day_type === 'rest' ? 'rest' : 'train'; // par défaut : jour d'entraînement
+  const dayT = dayVariant(pl, dayType);
+  const cd = computeDay(dayT, pl.meal_plan, pr);
+  const ex = extraTargets(dayT.calories, lastWeight());
   const week = S.daily.filter((d) => d.date >= addDays(today(), -6));
   const wAvg = avg(week.filter((d) => d.calories).map((d) => d.calories));
   return `
   <section class="card">
+    <h2>Aujourd’hui</h2>
+    <div class="tabs">
+      <button type="button" class="${dayType === 'train' ? 'on' : ''}" data-act="setDayType" data-arg="train">🏋️ Jour d’entraînement</button>
+      <button type="button" class="${dayType === 'rest' ? 'on' : ''}" data-act="setDayType" data-arg="rest">🛋️ Jour de repos</button>
+    </div>
+    <p class="muted">Les glucides (donc les calories) sont plus élevés les jours d’entraînement et plus bas les jours de repos. Protéines et lipides ne changent pas.</p>
+  </section>
+  <section class="card">
     <h2>Tes cibles du jour</h2>
     <div class="grid4">
-      <div class="stat"><b>${pl.calories}</b><span>kcal</span></div><div class="stat"><b>${pl.protein}</b><span>protéines g</span></div>
-      <div class="stat"><b>${pl.carbs}</b><span>glucides g</span></div><div class="stat"><b>${pl.fat}</b><span>lipides g</span></div>
+      <div class="stat"><b>${dayT.calories}</b><span>kcal</span></div><div class="stat"><b>${dayT.protein}</b><span>protéines g</span></div>
+      <div class="stat"><b>${dayT.carbs}</b><span>glucides g</span></div><div class="stat"><b>${dayT.fat}</b><span>lipides g</span></div>
     </div>
     <div class="grid3" style="margin-top:10px">
       <div class="stat"><b>≥ ${ex.fibre} g</b><span>fibres</span></div><div class="stat"><b>${pr.water ? '' : '≈ '}${String(pr.water ?? ex.eau).replace('.', ',')} L</b><span>eau</span></div>
       <div class="stat"><b>≤ ${ex.satfat} g</b><span>gras saturés</span></div>
     </div>
-    <p class="muted">Le coach ajuste ces cibles chaque semaine selon ton check-in.</p>
+    <p class="muted">Moyenne hebdomadaire : ${pl.calories} kcal · ${pl.protein} g prot. · ${pl.carbs} g gluc. · ${pl.fat} g lip. Le coach ajuste cette moyenne chaque semaine selon ton check-in.</p>
     <button class="ghost block" data-act="editTargets">Modifier mes cibles</button>
   </section>
   <p class="muted">Quantités en aliments cuits, sauf indication. Les marques sont des exemples courants et les valeurs sont des moyennes : vérifie l’étiquette de ta marque.</p>
@@ -482,11 +506,11 @@ function vFood() {
     </section>`).join('')}
   <section class="card">
     <h2>Total du plan</h2>
-    <div class="row between"><span>Calories</span><span>${m1(cd.totals.k)} / ${pl.calories}</span></div>${bar(cd.totals.k, pl.calories)}
-    <div class="row between"><span>Protéines</span><span>${m1(cd.totals.p)} / ${pl.protein} g</span></div>${bar(cd.totals.p, pl.protein)}
-    <div class="row between"><span>Glucides</span><span>${m1(cd.totals.c)} / ${pl.carbs} g</span></div>${bar(cd.totals.c, pl.carbs)}
-    <div class="row between"><span>Lipides</span><span>${m1(cd.totals.f)} / ${pl.fat} g</span></div>${bar(cd.totals.f, pl.fat)}
-    <p class="muted">Les quantités sont arrondies à des portions pratiques et se recalculent quand tes cibles changent.</p>
+    <div class="row between"><span>Calories</span><span>${m1(cd.totals.k)} / ${dayT.calories}</span></div>${bar(cd.totals.k, dayT.calories)}
+    <div class="row between"><span>Protéines</span><span>${m1(cd.totals.p)} / ${dayT.protein} g</span></div>${bar(cd.totals.p, dayT.protein)}
+    <div class="row between"><span>Glucides</span><span>${m1(cd.totals.c)} / ${dayT.carbs} g</span></div>${bar(cd.totals.c, dayT.carbs)}
+    <div class="row between"><span>Lipides</span><span>${m1(cd.totals.f)} / ${dayT.fat} g</span></div>${bar(cd.totals.f, dayT.fat)}
+    <p class="muted">Les quantités visent tes cibles à quelques grammes près et se recalculent quand tu changes un aliment ou tes cibles.</p>
     <div class="grid2">
       <button class="ghost" data-act="grocery">Liste d’épicerie</button>
       <button class="ghost" data-act="showPrefs">Mes préférences</button>
@@ -494,13 +518,19 @@ function vFood() {
   </section>
   <form data-form="daily" class="card">
     <h2>Journal du jour</h2>
-    <label>Poids du matin (kg) — optionnel</label><input name="weight" type="number" step="0.1" inputmode="decimal" value="${log.weight ?? ''}">
+    <label>Poids du matin (${wUnit()}) — optionnel</label><input name="weight" type="number" step="0.1" inputmode="decimal" value="${log.weight != null ? fmtWeight(log.weight, wUnit()) : ''}">
     <label>Calories mangées</label><input name="calories" type="number" inputmode="numeric" value="${log.calories ?? ''}">
     <label>Protéines (g)</label><input name="protein" type="number" inputmode="numeric" value="${log.protein ?? ''}">
     <button class="block" style="margin-top:12px">Enregistrer</button>
-    ${wAvg ? `<p class="muted">Moyenne des 7 derniers jours : ${Math.round(wAvg)} kcal (cible ${pl.calories}).</p>` : ''}
+    ${wAvg ? `<p class="muted">Moyenne des 7 derniers jours : ${Math.round(wAvg)} kcal (cible ${dayT.calories}).</p>` : ''}
   </form>`;
 }
+acts.setDayType = async (el) => {
+  try {
+    await db.saveDaily({ user_id: S.me.id, date: today(), day_type: el.dataset.arg });
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
 
 acts.showPrefs = () => { S.editPrefs = true; render(); window.scrollTo(0, 0); };
 acts.cancelPrefs = () => { S.editPrefs = false; render(); };
@@ -508,7 +538,7 @@ acts.swapFood = (el) => {
   const si = +el.dataset.slot, ii = +el.dataset.item;
   const pl = S.plan, pr = prefs();
   const it = pl.meal_plan.meals[si].items[ii];
-  const cur = computeDay(pl, pl.meal_plan, pr).meals[si].items[ii];
+  const cur = computeDay(curDayTargets(), pl.meal_plan, pr).meals[si].items[ii];
   const eq = equivalents(pl.meal_plan, si, ii, pr);
   openSheet(`
     <div class="row between"><h2>Remplacer</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
@@ -517,7 +547,11 @@ acts.swapFood = (el) => {
       <div class="alt">
         <div style="flex:1"><b>${esc(f.name)}</b><div class="muted">Marques : ${esc(f.brands)}</div></div>
         <button class="small" data-act="pickFood" data-slot="${si}" data-item="${ii}" data-food="${f.id}">Choisir</button>
-      </div>`).join('') : '<p>Aucun autre aliment ne convient à tes restrictions pour ce repas. Essaie « Autre repas » ou change tes préférences.</p>'}`);
+      </div>`).join('') : '<p class="muted">Aucun aliment de la liste intégrée ne convient à tes restrictions pour ce repas.</p>'}
+    <h3>Ou cherche un aliment précis (marque, produit)</h3>
+    <input type="search" data-act="searchInput" data-slot="${si}" data-item="${ii}" placeholder="ex. yogourt Oikos vanille, pain Country Harvest…" aria-label="Rechercher un aliment">
+    <div id="food-search-results" class="muted" style="margin-top:8px">Tape au moins 2 lettres.</div>
+    <p class="muted" style="margin-top:8px">Recherche fournie par Open Food Facts, une base ouverte : vérifie que le résultat correspond à tes restrictions et à l’étiquette réelle.</p>`);
 };
 acts.pickFood = async (el) => {
   try {
@@ -526,17 +560,50 @@ acts.pickFood = async (el) => {
     await refresh();
   } catch (e) { toast(e.message); }
 };
+let searchTimer = null;
+acts.searchInput = (el) => {
+  clearTimeout(searchTimer);
+  const box = document.getElementById('food-search-results');
+  const si = el.dataset.slot, ii = el.dataset.item;
+  const q = el.value.trim();
+  if (q.length < 2) { box.textContent = 'Tape au moins 2 lettres.'; return; }
+  box.textContent = 'Recherche…';
+  searchTimer = setTimeout(async () => {
+    try {
+      const results = await searchFoods(q);
+      if (results === null) return; // recherche périmée, une plus récente est en cours
+      box.innerHTML = results.length
+        ? results.map((r) => `
+          <div class="alt">
+            <div style="flex:1"><b>${esc(r.name)}</b><div class="muted">${esc(r.brands || '—')} · ${Math.round(r.k)} kcal, P${Math.round(r.p)} G${Math.round(r.c)} L${Math.round(r.f)} /100 g</div></div>
+            <button type="button" class="small" data-act="pickCustomFood" data-slot="${si}" data-item="${ii}"
+              data-id="${esc(r.id)}" data-name="${esc(r.name)}" data-brands="${esc(r.brands)}" data-k="${r.k}" data-p="${r.p}" data-c="${r.c}" data-f="${r.f}">Choisir</button>
+          </div>`).join('')
+        : '<p class="muted">Aucun résultat. Essaie un autre nom (en français ou en anglais).</p>';
+    } catch (e) { box.textContent = e.message; }
+  }, 450);
+};
+acts.pickCustomFood = async (el) => {
+  const d = el.dataset;
+  const food = externalFood({ id: d.id, name: d.name, brands: d.brands, k: +d.k, p: +d.p, c: +d.c, f: +d.f });
+  try {
+    await savePlan({ meal_plan: swapItemCustom(S.plan.meal_plan, +d.slot, +d.item, food) });
+    closeSheet();
+    toast(`${food.name} ajouté à ton plan`);
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
 acts.reroll = async (el) => {
   try {
-    await savePlan({ meal_plan: rerollMeal(S.plan.meal_plan, +el.dataset.slot, prefs(), S.plan) });
+    await savePlan({ meal_plan: rerollMeal(S.plan.meal_plan, +el.dataset.slot, prefs(), curDayTargets()) });
     await refresh();
   } catch (e) { toast(e.message); }
 };
 acts.grocery = () => {
-  const list = groceryList(computeDay(S.plan, S.plan.meal_plan, prefs()), 7);
+  const list = groceryList(computeDay(curDayTargets(), S.plan.meal_plan, prefs()), 7);
   openSheet(`
     <div class="row between"><h2>Épicerie (7 jours)</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <p class="muted">Quantités pour une semaine de ton plan actuel.</p>
+    <p class="muted">Quantités pour une semaine de ton plan actuel (jour d’entraînement).</p>
     ${list.map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">Marques : ${esc(g.brands)}</div></div></div>`).join('')}`);
 };
 acts.editTargets = () => {
@@ -554,7 +621,7 @@ acts.editTargets = () => {
 };
 
 function vCheckin() {
-  const wk = mondayOf();
+  const wk = curWeek(S.checkins);
   const cur = S.checkins.find((c) => c.week_start === wk);
   if (cur) {
     const c = cur.coach || { messages: [] };
@@ -580,7 +647,7 @@ function vCheckin() {
   <form data-form="checkin" class="card">
     <h2>Check-in de la semaine</h2>
     <p class="muted">Semaine du ${fmtDate(wk)} · sois honnête, le coach se base là-dessus.</p>
-    <label>Poids moyen de la semaine (kg)</label><input name="weight" type="number" step="0.1" inputmode="decimal" required value="${w0}">
+    <label>Poids moyen de la semaine (${wUnit()})</label><input name="weight" type="number" step="0.1" inputmode="decimal" required value="${fmtWeight(w0, wUnit())}">
     <label>Tour de taille (cm) — optionnel</label><input name="waist" type="number" step="0.5" inputmode="decimal">
     <div class="grid2">
       <div><label>Sommeil</label>${sel('sleep')}</div><div><label>Énergie</label>${sel('energy')}</div>
@@ -614,13 +681,13 @@ function vProgress() {
   <section class="card">
     <h2>${esc(d.profile.name)} · ${GOALS[d.profile.goal]}</h2>
     <div class="grid4">
-      <div class="stat"><b>${st.change > 0 ? '+' : ''}${st.change}</b><span>kg depuis le début</span></div>
+      <div class="stat"><b>${st.change > 0 ? '+' : ''}${fmtWeight(st.change, wUnit(d.profile))}</b><span>${wUnit(d.profile)} depuis le début</span></div>
       <div class="stat"><b>${st.total}</b><span>séances</span></div>
       <div class="stat"><b>${st.streak}</b><span>sem. d’affilée</span></div>
       <div class="stat"><b>${st.adh ?? '–'}${st.adh === null ? '' : '%'}</b><span>régularité</span></div>
     </div>
   </section>
-  <section class="card"><h2>Poids</h2>${lineChart(pts)}</section>
+  <section class="card"><h2>Poids</h2>${lineChart(pts, wUnit(d.profile))}</section>
   <section class="card"><h2>Photos</h2>
     <div class="tabs">${Object.entries(SLOTS).map(([k, v]) => `<button class="${S.slot === k ? 'on' : ''}" data-act="slot" data-arg="${k}">${v}</button>`).join('')}</div>
     ${!canSee ? '<p class="muted">Cette personne ne partage pas ses photos.</p>'
@@ -631,7 +698,7 @@ function vProgress() {
         </div>`}
   </section>
   <section class="card"><h2>Check-ins</h2>
-    ${[...d.checkins].reverse().map((c) => `<div class="row between"><span>${fmtDate(c.week_start)}</span><span class="muted">${c.weight} kg · séances ${c.adherence_training}% · nutrition ${c.adherence_nutrition}%</span></div>`).join('') || '<p class="muted">Aucun check-in.</p>'}
+    ${[...d.checkins].reverse().map((c) => `<div class="row between"><span>${fmtDate(c.week_start)}</span><span class="muted">${wTxt(c.weight, d.profile)} · séances ${c.adherence_training}% · nutrition ${c.adherence_nutrition}%</span></div>`).join('') || '<p class="muted">Aucun check-in.</p>'}
   </section>`;
 }
 
@@ -678,39 +745,64 @@ const FAQ_DEFAULT = 'Je peux répondre aux questions sur l’application (exerci
 
 function aiContext() {
   const p = S.profile, pl = S.plan, pr = prefs();
-  const meals = pl.meal_plan ? computeDay(pl, pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
+  const mealsFor = (dt) => pl.meal_plan ? computeDay(dayVariant(pl, dt), pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
   return {
-    profil: { objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm, poids_kg: lastWeight(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '' },
-    nutrition: { cibles: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau }, allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, plan_de_repas: meals },
+    profil: {
+      objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
+      poids_kg: lastWeight(), unite_poids_affichee: wUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
+    },
+    nutrition: {
+      cibles_moyennes_semaine: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau },
+      cycle_glucidique: { jour_entrainement: dayVariant(pl, 'train'), jour_repos: dayVariant(pl, 'rest'), note: 'Protéines et lipides identiques les deux types de jour ; seuls glucides et calories varient. La personne choisit le type de jour dans l’onglet Repas.' },
+      allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals,
+      plan_de_repas_jour_entrainement: mealsFor('train'), plan_de_repas_jour_repos: mealsFor('rest'),
+    },
     programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => defOf(e).name) })),
-    guide_application_supplementaire: 'Onglet Séance > « Modifier mon programme » : on peut ajouter, renommer, déplacer ou supprimer un jour, ajouter/retirer/déplacer des exercices, changer les séries et répétitions, et créer un exercice personnalisé (nom, type charge/poids du corps/durée, consigne, lien vidéo). Ces modifications se font à la main dans l’application ; tu n’as pas à dire que c’est impossible.',
+    guide_application_supplementaire: 'Onglet Séance > « Modifier mon programme » : on peut ajouter, renommer, déplacer ou supprimer un jour, ajouter/retirer/déplacer des exercices, changer les séries et répétitions, et créer un exercice personnalisé (nom, type charge/poids du corps/durée, consigne, lien vidéo). Onglet Repas > le bouton ↔ propose aussi une recherche libre d’aliment (marques précises). Réglages : unité de poids kg/lb. Ces changements se font à la main dans l’application ; tu n’as pas à dire que c’est impossible.',
     semaine_legere: !!pl.deload,
     derniers_checkins: S.checkins.slice(-4).map(({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes }) => ({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes })),
     ajustements_du_coach: (pl.reasons || []).map((r) => r.text),
   };
 }
 
+// Photos de progrès à joindre pour que l'IA les analyse (pas seulement les chiffres). Non disponible en mode démo
+// (pas de fonction serveur) ni pour des photos qui ne sont pas dans le stockage Supabase.
+const ANGLE_NAME = { front: 'face', side: 'profil', back: 'dos' };
+function photosOf(checkin, label) {
+  if (!checkin || db.DEMO) return [];
+  return Object.entries(checkin.photos || {}).map(([slot, path]) => ({ path, label: `${label} — ${ANGLE_NAME[slot] || slot}` }));
+}
+function recentPhotos(n = 2) {
+  const withPhotos = S.checkins.filter((c) => c.photos && Object.keys(c.photos).length).slice(-n);
+  return withPhotos.flatMap((c) => photosOf(c, `Semaine du ${fmtDate(c.week_start)}`));
+}
+
 function vCoach() {
   const hist = chatLoad();
+  const hasPhotos = !db.DEMO && S.checkins.some((c) => c.photos && Object.keys(c.photos).length);
   return `
   <section class="card">
     <h2>Ton espace coach</h2>
     <p class="muted">${canAI()
       ? 'Pose tes questions sur ton entraînement, tes repas ou tes résultats. Je connais ton profil et ton plan. Je ne remplace pas un professionnel de la santé.'
-      : 'Mode simple : je réponds aux questions sur l’application. Le coach IA complet n’est pas encore activé (voir le README, section « Avis IA »).'}</p>
+      : 'Mode simple : je réponds aux questions sur l’application. Le coach IA complet n’est pas encore activé (voir le README, section « Coach IA »).'}</p>
     <div class="chat">
       ${hist.length ? hist.map((m) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>`).join('') : '<p class="muted">Pose ta première question ou choisis une suggestion.</p>'}
       ${S.chatBusy ? '<div class="bubble ai">…</div>' : ''}
     </div>
-    <div class="chips">${CHIPS.map((c) => `<button type="button" class="ghost small" data-act="ask" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="chips">
+      ${canAI() && hasPhotos ? '<button type="button" class="ghost small" data-act="askPhotos">📸 Analyser mes photos de progrès</button>' : ''}
+      ${CHIPS.map((c) => `<button type="button" class="ghost small" data-act="ask" data-q="${esc(c)}">${esc(c)}</button>`).join('')}
+    </div>
     <form data-form="chat" class="chatform">
       <textarea name="q" rows="2" placeholder="Écris ton message…" required></textarea>
       <button ${S.chatBusy ? 'disabled' : ''}>Envoyer</button>
     </form>
     ${hist.length ? '<button type="button" class="ghost small" data-act="clearChat">Effacer la conversation</button>' : ''}
+    ${canAI() ? '<p class="muted" style="margin-top:10px">Tes photos de progrès, quand tu les analyses, sont envoyées à Google (Gemini) pour cette réponse seulement.</p>' : ''}
   </section>`;
 }
-async function ask(q) {
+async function ask(q, photos = []) {
   const hist = chatLoad();
   hist.push({ r: 'user', t: q });
   chatSave(hist);
@@ -721,7 +813,7 @@ async function ask(q) {
   if (!canAI()) {
     text = faq(q) ?? FAQ_DEFAULT;
   } else {
-    const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext() };
+    const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext(), photos };
     const transient = (e) => /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
     try {
       try {
@@ -743,6 +835,7 @@ async function ask(q) {
   window.scrollTo(0, document.body.scrollHeight);
 }
 acts.ask = (el) => ask(el.dataset.q);
+acts.askPhotos = () => ask('Analyse l’évolution visible sur mes photos de progrès (silhouette, posture), en plus de mes derniers chiffres.', recentPhotos(2));
 acts.clearChat = () => { chatSave([]); render(); };
 forms.chat = async (form) => {
   const q = String(new FormData(form).get('q') || '').trim();
@@ -758,7 +851,7 @@ function profileForm(p = {}, label = 'Enregistrer') {
       <div><label>Sexe</label><select name="sex">${opt('homme', 'Homme', p.sex)}${opt('femme', 'Femme', p.sex)}</select></div>
       <div><label>Année de naissance</label><input name="birth_year" type="number" min="1940" max="2015" required value="${p.birth_year ?? ''}"></div>
       <div><label>Taille (cm)</label><input name="height_cm" type="number" min="120" max="230" required value="${p.height_cm ?? ''}"></div>
-      <div><label>Poids actuel (kg)</label><input name="start_weight" type="number" step="0.1" min="30" max="250" required value="${p.start_weight ?? ''}"></div>
+      <div><label>Poids actuel (${wUnit(p)})</label><input name="start_weight" type="number" step="0.1" min="15" max="550" required value="${p.start_weight != null ? fmtWeight(p.start_weight, wUnit(p)) : ''}"></div>
     </div>
     <label>Objectif</label><select name="goal">${Object.entries(GOALS).map(([k, v]) => opt(k, v, p.goal)).join('')}</select>
     <div class="grid2">
@@ -775,13 +868,26 @@ function profileForm(p = {}, label = 'Enregistrer') {
 }
 
 function vSettings() {
+  const u = wUnit();
   return `
+  <section class="card">
+    <h2>Unité de poids</h2>
+    <div class="tabs">
+      <button type="button" class="${u === 'kg' ? 'on' : ''}" data-act="setUnit" data-arg="kg">Kilogrammes (kg)</button>
+      <button type="button" class="${u === 'lb' ? 'on' : ''}" data-act="setUnit" data-arg="lb">Livres (lb)</button>
+    </div>
+    <p class="muted">Change juste l’affichage : tes données restent enregistrées en kilogrammes.</p>
+  </section>
   ${profileForm(S.profile)}
   <section class="card">
     <p class="muted">Connecté : ${esc(S.me.email)}</p>
     ${db.DEMO ? '<button class="ghost block" data-act="resetDemo">Réinitialiser la démo</button>' : '<button class="ghost block" data-act="logout">Se déconnecter</button>'}
   </section>`;
 }
+acts.setUnit = async (el) => {
+  try { await setFoodPrefs({ weight_unit: el.dataset.arg }); toast(`Poids affichés en ${el.dataset.arg}`); render(); }
+  catch (e) { toast(e.message); }
+};
 
 const routes = { home: vHome, train: vTrain, edit: vEdit, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
 const TITLES = { home: 'Accueil', train: 'Entraînement', edit: 'Mon programme', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
@@ -846,10 +952,13 @@ acts.resetDemo = () => { db.resetDemo(); location.hash = '#/home'; location.relo
 acts.askAI = async (el) => {
   el.disabled = true; el.textContent = 'Le coach réfléchit…';
   try {
-    const cur = S.checkins.find((c) => c.week_start === mondayOf());
+    const cur = S.checkins.find((c) => c.week_start === curWeek(S.checkins));
+    const prev = S.checkins[S.checkins.length - 2];
+    const photos = [...photosOf(cur, 'Cette semaine'), ...photosOf(prev, 'Semaine précédente')];
     const text = await db.askCoach({
-      messages: [{ role: 'user', text: 'Commente ma semaine en 4 à 6 phrases : ce qui va bien, ce qui inquiète, et une action concrète pour la semaine à venir.' }],
+      messages: [{ role: 'user', text: 'Commente ma semaine en 4 à 8 phrases : ce qui va bien, ce qui inquiète, et une action concrète pour la semaine à venir. Si des photos sont jointes, commente aussi ce qui est visible dessus (silhouette, posture), en plus des chiffres.' }],
       context: { ...aiContext(), ajustements_du_coach: cur.coach.messages.map((m) => m.text) },
+      photos,
     });
     await db.saveCheckin({ ...cur, coach: { ...cur.coach, ai: text } });
     await refresh();
@@ -873,7 +982,7 @@ forms.profile = async (form) => {
   const p = {
     ...(old || {}),
     id: S.me.id, name: fd.name.trim(), sex: fd.sex, birth_year: +fd.birth_year, height_cm: +fd.height_cm,
-    start_weight: +fd.start_weight, goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
+    start_weight: toKg(+fd.start_weight, wUnit(old)), goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
   if (old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment)
@@ -959,8 +1068,9 @@ forms.workout = async (form) => {
 forms.daily = async (form) => {
   const fd = new FormData(form);
   const num = (k) => (fd.get(k) === '' ? null : +fd.get(k));
+  const w = num('weight');
   try {
-    await db.saveDaily({ user_id: S.me.id, date: today(), weight: num('weight'), calories: num('calories'), protein: num('protein') });
+    await db.saveDaily({ user_id: S.me.id, date: today(), weight: w == null ? null : toKg(w, wUnit()), calories: num('calories'), protein: num('protein') });
     toast('Journal enregistré');
     await refresh();
   } catch (e) { toast(e.message); }
@@ -968,7 +1078,7 @@ forms.daily = async (form) => {
 
 forms.checkin = async (form) => {
   const fd = new FormData(form);
-  const wk = mondayOf();
+  const wk = curWeek(S.checkins);
   const btn = form.querySelector('button');
   btn.disabled = true; btn.textContent = 'Envoi…';
   try {
@@ -978,7 +1088,7 @@ forms.checkin = async (form) => {
       if (f && f.size) photos[slot] = await db.uploadPhoto(S.me.id, wk, slot, await resizeImage(f));
     }
     const c = {
-      user_id: S.me.id, week_start: wk, weight: +fd.get('weight'), waist: +fd.get('waist') || null,
+      user_id: S.me.id, week_start: wk, weight: toKg(+fd.get('weight'), wUnit()), waist: +fd.get('waist') || null,
       sleep: +fd.get('sleep'), energy: +fd.get('energy'), soreness: +fd.get('soreness'), stress: +fd.get('stress'),
       adherence_training: +fd.get('adherence_training'), adherence_nutrition: +fd.get('adherence_nutrition'),
       notes: fd.get('notes') || '', photos,
@@ -1023,6 +1133,8 @@ function bindEvents(el) {
       const q = norm(e.target.value.trim());
       e.target.closest('.panel').querySelectorAll('[data-name]').forEach((r) => { r.hidden = !!q && !r.dataset.name.includes(q); });
     }
+    // Champs qui réagissent en tapant (ex. recherche d'aliment)
+    if (e.target.dataset.act && acts[e.target.dataset.act]) acts[e.target.dataset.act](e.target, e);
   });
 }
 bindEvents(root);

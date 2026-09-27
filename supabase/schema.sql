@@ -53,6 +53,7 @@ create table if not exists daily_logs (
   weight numeric,
   calories int,
   protein int,
+  day_type text, -- 'train' ou 'rest' : sert au cycle glucidique du plan de repas
   unique (user_id, date)
 );
 

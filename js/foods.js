@@ -77,6 +77,14 @@ export const FOODS = [
 
 export const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
 
+// Un aliment d'un repas vient soit de la liste ci-dessus (id), soit d'une recherche externe (custom).
+export const resolveFood = (id, custom) => custom || FOOD_BY_ID[id];
+
+// Construit un aliment « personnalisé » à partir d'un résultat de recherche (Open Food Facts).
+export function externalFood({ id, name, brands, k, p, c, f }) {
+  return { id, name, per100: { k, p, c, f }, max: 500, allergens: [], brands: brands || 'Trouvé par recherche : vérifie l’étiquette de l’emballage.', external: true };
+}
+
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 // Cet aliment convient-il à la personne ? (allergies, régime, aliments non aimés)

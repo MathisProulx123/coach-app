@@ -24,6 +24,9 @@ export const RULES = {
   deload: { volumeFactor: 0.6, loadFactor: 0.9 }, // 60 % des séries, 90 % de la charge
   // Récupération : 2 signaux ou plus = semaine légère
   poorRecovery: { sleepMax: 2, energyMax: 2, sorenessMin: 4, stressMin: 4 },
+  // Cycle glucidique jour d'entraînement / jour de repos : protéines et lipides ne bougent pas,
+  // seuls les glucides (donc les calories) montent les jours d'entraînement et baissent les jours de repos.
+  dayCycle: { trainCarbFactor: 1.20, restCarbFactor: 0.80 },
 };
 
 import { daysBetween, roundHalf, round1 } from './util.js';
@@ -50,6 +53,16 @@ export function extraTargets(calories, kg) {
     eau: Math.round(kg * 0.035 * 10) / 10,              // environ 35 ml par kg, en litres
     satfat: Math.round((calories * 0.1) / 9),           // gras saturés : au plus 10 % des calories
   };
+}
+
+// Cibles du jour selon que c'est un jour d'entraînement ou de repos (cycle glucidique).
+// plan = les cibles moyennes de la semaine (celles que le coach ajuste chaque semaine).
+export function dayVariant(plan, kind) {
+  if (kind !== 'train' && kind !== 'rest') return { calories: plan.calories, protein: plan.protein, carbs: plan.carbs, fat: plan.fat };
+  const factor = kind === 'train' ? RULES.dayCycle.trainCarbFactor : RULES.dayCycle.restCarbFactor;
+  const carbs = Math.max(0, Math.round((plan.carbs * factor) / 5) * 5);
+  const calories = Math.round((plan.protein * 4 + carbs * 4 + plan.fat * 9) / 10) * 10;
+  return { calories, protein: plan.protein, carbs, fat: plan.fat };
 }
 
 // Cibles de départ
