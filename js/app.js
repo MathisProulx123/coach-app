@@ -1,6 +1,7 @@
 import * as db from './db.js';
 import { CONFIG } from './config.js';
-import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight } from './util.js';
+import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight, kgToLb, lbToKg } from './util.js';
+import { parsePlates } from './plates.js';
 import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, DIETS, externalFood } from './foods.js';
@@ -50,7 +51,37 @@ async function ensureMealPlan() {
     S.plan = await db.getPlan(S.me.id);
   }
 }
-const prefs = () => ({ allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '', ...(S.profile?.food_prefs || {}) });
+const prefs = () => ({
+  allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '',
+  load_unit: 'kg', plate_lb: 45, bar_lb: 45, ...(S.profile?.food_prefs || {}),
+});
+const loadUnit = () => prefs().load_unit || 'kg';
+// Texte de l'objectif de charge, dans l'unité choisie (kg, lb, ou lb + repère par côté pour les plates).
+function loadTxt(kg) {
+  if (kg == null) return null;
+  const u = loadUnit();
+  if (u === 'kg') return `${round1(kg)} kg`;
+  const lb = round1(kgToLb(kg));
+  if (u === 'lb') return `${lb} lb`;
+  const perSide = round1((lb - (prefs().bar_lb ?? 45)) / 2);
+  return `${lb} lb (${perSide} lb/côté sans la barre)`;
+}
+// Attributs du champ de saisie d'une série, selon l'unité choisie.
+function loadInputAttrs(kg) {
+  const u = loadUnit();
+  if (u === 'plates') return { type: 'text', value: '', placeholder: 'ex. 1 plate 25' };
+  const v = kg == null ? '' : round1(u === 'lb' ? kgToLb(kg) : kg);
+  return { type: 'number', value: v, placeholder: u };
+}
+// Convertit ce que la personne a tapé (kg, lb ou notation plates) en kilogrammes pour l'enregistrement.
+function parseLoadInput(raw) {
+  const u = loadUnit();
+  if (raw === '' || raw == null) return 0;
+  if (u === 'kg') return +raw || 0;
+  if (u === 'lb') return lbToKg(+raw || 0);
+  const p = parsePlates(raw, { plateLb: prefs().plate_lb ?? 45, barLb: prefs().bar_lb ?? 45 });
+  return p ? lbToKg(p.totalLb) : 0;
+}
 const wUnit = (p = S.profile) => (p?.food_prefs?.weight_unit) || 'kg';
 const wTxt = (kg, p = S.profile) => `${fmtWeight(kg, wUnit(p))} ${wUnit(p)}`;
 async function setFoodPrefs(patch) {
@@ -244,13 +275,13 @@ function vTrain() {
         <div class="row tap" data-act="exInfo" data-arg="${ex.id}" role="button" tabindex="0" aria-label="Voir l’exercice ${esc(def.name)}">
           ${thumb(ex.id)}
           <div style="flex:1"><h3>${esc(def.name)} <span class="muted">ⓘ</span></h3>
-          <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${t.w} kg` : ''}</div></div>
+          <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${loadTxt(t.w)}` : ''}</div></div>
         </div>
-        <div class="muted">${esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${s.w || 0}×${s.r}`).join(', ')}.` : ''}</div>
-        <div class="sets">${Array.from({ length: t.sets }, (_, s) => `
+        <div class="muted">${esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${loadUnit() === 'kg' ? round1(s.w || 0) : round1(kgToLb(s.w || 0))}${loadUnit() === 'kg' ? '' : ' lb'}×${s.r}`).join(', ')}.` : ''}</div>
+        <div class="sets">${Array.from({ length: t.sets }, (_, s) => { const a = loadInputAttrs(t.w); return `
           <span class="muted">${s + 1}</span>
-          <input name="w_${i}_${s}" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${t.w ?? ''}" aria-label="Charge série ${s + 1}">
-          <input name="r_${i}_${s}" type="number" inputmode="numeric" min="0" placeholder="${unit}" aria-label="Répétitions série ${s + 1}">`).join('')}
+          <input name="w_${i}_${s}" type="${a.type}" ${a.type === 'number' ? 'inputmode="decimal" step="0.5"' : ''} min="0" placeholder="${a.placeholder}" value="${a.value}" aria-label="Charge série ${s + 1}">
+          <input name="r_${i}_${s}" type="number" inputmode="numeric" min="0" placeholder="${unit}" aria-label="Répétitions série ${s + 1}">`; }).join('')}
         </div></div>`;
     }).join('')}
     <button class="block" style="margin-top:12px">Terminer la séance</button>
@@ -780,7 +811,7 @@ function aiContext() {
   return {
     profil: {
       objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
-      poids_kg: lastWeight(), unite_poids_affichee: wUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
+      poids_kg: lastWeight(), unite_poids_affichee: wUnit(), unite_charge_affichee: loadUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
       objectif_chiffre: goalStatus(profileWithGoal(), lastWeight()) ?? 'aucun poids/date visés fixés',
     },
     nutrition: {
@@ -906,15 +937,31 @@ function profileForm(p = {}, label = 'Enregistrer') {
 }
 
 function vSettings() {
-  const u = wUnit();
+  const u = wUnit(), lu = loadUnit(), pr = prefs();
   return `
   <section class="card">
-    <h2>Unité de poids</h2>
+    <h2>Unité de poids (balance, check-in)</h2>
     <div class="tabs">
       <button type="button" class="${u === 'kg' ? 'on' : ''}" data-act="setUnit" data-arg="kg">Kilogrammes (kg)</button>
       <button type="button" class="${u === 'lb' ? 'on' : ''}" data-act="setUnit" data-arg="lb">Livres (lb)</button>
     </div>
     <p class="muted">Change juste l’affichage : tes données restent enregistrées en kilogrammes.</p>
+  </section>
+  <section class="card">
+    <h2>Unité de charge (barre, haltères)</h2>
+    <div class="tabs">
+      <button type="button" class="${lu === 'kg' ? 'on' : ''}" data-act="setLoadUnit" data-arg="kg">Kilogrammes</button>
+      <button type="button" class="${lu === 'lb' ? 'on' : ''}" data-act="setLoadUnit" data-arg="lb">Livres</button>
+      <button type="button" class="${lu === 'plates' ? 'on' : ''}" data-act="setLoadUnit" data-arg="plates">Plates</button>
+    </div>
+    ${lu === 'plates' ? `
+    <form data-form="plateSettings">
+      <label>Poids d’une plate (lb)</label><input name="plate_lb" type="number" step="0.5" min="1" max="100" required value="${pr.plate_lb}">
+      <label>Poids de la barre (lb)</label><input name="bar_lb" type="number" step="0.5" min="0" max="100" required value="${pr.bar_lb}">
+      <button class="ghost block" style="margin-top:10px">Enregistrer</button>
+    </form>
+    <p class="muted" style="margin-top:10px">Total = barre + 2 × (plates que tu tapes). Exemples : « 1 plate 25 » = 1×${pr.plate_lb} + 25 par côté ; « 2 plates » = 2×${pr.plate_lb} par côté. Le champ de charge devient un champ texte pendant tes séances.</p>`
+      : '<p class="muted">Change juste comment tu entres/vois tes charges à l’entraînement ; tes données restent en kilogrammes.</p>'}
   </section>
   ${profileForm(S.profile)}
   <section class="card">
@@ -925,6 +972,18 @@ function vSettings() {
 acts.setUnit = async (el) => {
   try { await setFoodPrefs({ weight_unit: el.dataset.arg }); toast(`Poids affichés en ${el.dataset.arg}`); render(); }
   catch (e) { toast(e.message); }
+};
+acts.setLoadUnit = async (el) => {
+  try { await setFoodPrefs({ load_unit: el.dataset.arg }); render(); }
+  catch (e) { toast(e.message); }
+};
+forms.plateSettings = async (form) => {
+  const fd = new FormData(form);
+  try {
+    await setFoodPrefs({ plate_lb: +fd.get('plate_lb') || 45, bar_lb: +fd.get('bar_lb') || 0 });
+    toast('Enregistré');
+    render();
+  } catch (e) { toast(e.message); }
 };
 
 const routes = { home: vHome, train: vTrain, edit: vEdit, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
@@ -1092,7 +1151,7 @@ forms.workout = async (form) => {
     const sets = [];
     for (let s = 0; fd.has(`r_${i}_${s}`); s++) {
       const r = +fd.get(`r_${i}_${s}`);
-      if (r > 0) sets.push({ w: +fd.get(`w_${i}_${s}`) || 0, r });
+      if (r > 0) sets.push({ w: round1(parseLoadInput(fd.get(`w_${i}_${s}`))), r });
     }
     if (sets.length) exercises.push({ id: ex.id, sets });
   });
