@@ -2,7 +2,7 @@ import * as db from './db.js';
 import { CONFIG } from './config.js';
 import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight } from './util.js';
 import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
-import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus } from './rules.js';
+import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, DIETS, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 
@@ -630,16 +630,25 @@ acts.grocery = () => {
 };
 acts.editTargets = () => {
   const p = S.plan;
+  const bmrFloor = bmr(S.profile, lastWeight());
   openSheet(`
     <div class="row between"><h2>Modifier mes cibles</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <p class="muted">Les glucides se calculent automatiquement avec le reste. Le coach repartira de ces valeurs au prochain check-in.</p>
+    <p class="muted">Fixe tes protéines, glucides et lipides ; les calories se calculent toutes seules à partir des trois. Le coach repartira de ces valeurs au prochain check-in (il n'ajustera que les calories et les glucides selon ton poids).</p>
     <form data-form="targets">
-      <label>Calories (kcal)</label><input name="calories" type="number" min="1000" max="6000" required value="${p.calories}">
-      <label>Protéines (g)</label><input name="protein" type="number" min="40" max="400" required value="${p.protein}">
-      <label>Lipides (g)</label><input name="fat" type="number" min="20" max="250" required value="${p.fat}">
-      <label>Eau (litres par jour)</label><input name="eau" type="number" step="0.1" min="1" max="8" required value="${prefs().water ?? extraTargets(p.calories, lastWeight()).eau}">
+      <label>Protéines (g)</label><input name="protein" type="number" min="40" max="400" required value="${p.protein}" data-act="targetsLive">
+      <label>Glucides (g)</label><input name="carbs" type="number" min="0" max="700" required value="${p.carbs}" data-act="targetsLive">
+      <label>Lipides (g)</label><input name="fat" type="number" min="20" max="250" required value="${p.fat}" data-act="targetsLive">
+      <div class="stat" style="margin-top:10px"><b id="targets-kcal">${p.calories}</b><span>kcal calculées</span></div>
+      <p id="targets-warn" class="muted" style="display:none;color:var(--warn)">⚠️ Sous ton métabolisme de base (${bmrFloor} kcal) : trop bas pour manger sur le long terme.</p>
+      <label style="margin-top:10px">Eau (litres par jour)</label><input name="eau" type="number" step="0.1" min="1" max="8" required value="${prefs().water ?? extraTargets(p.calories, lastWeight()).eau}">
       <button class="block" style="margin-top:12px">Enregistrer</button>
     </form>`);
+};
+acts.targetsLive = (el) => {
+  const f = el.form;
+  const kcal = Math.max(0, (+f.protein.value || 0) * 4 + (+f.carbs.value || 0) * 4 + (+f.fat.value || 0) * 9);
+  document.getElementById('targets-kcal').textContent = Math.round(kcal);
+  document.getElementById('targets-warn').style.display = kcal < bmr(S.profile, lastWeight()) ? 'block' : 'none';
 };
 
 function vCheckin() {
@@ -1058,8 +1067,8 @@ forms.food = async (form) => {
 
 forms.targets = async (form) => {
   const fd = new FormData(form);
-  const calories = +fd.get('calories'), protein = +fd.get('protein'), fat = +fd.get('fat');
-  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
+  const protein = +fd.get('protein'), carbs = +fd.get('carbs'), fat = +fd.get('fat');
+  const calories = Math.round(protein * 4 + carbs * 4 + fat * 9);
   const eau = Math.round(parseFloat(String(fd.get('eau')).replace(',', '.')) * 10) / 10;
   try {
     if (eau > 0 && eau !== prefs().water) {
