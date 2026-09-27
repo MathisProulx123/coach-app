@@ -5,7 +5,6 @@ import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant } from './rules.js';
 import { ALLERGENS, DIETS, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
-import { searchFoods } from './foodsearch.js';
 
 const S = {
   me: null, profile: null, plan: null, workouts: [], daily: [], checkins: [], other: null,
@@ -570,7 +569,7 @@ acts.searchInput = (el) => {
   box.textContent = 'Recherche…';
   searchTimer = setTimeout(async () => {
     try {
-      const results = await searchFoods(q);
+      const results = await db.searchFoods(q);
       if (results === null) return; // recherche périmée, une plus récente est en cours
       box.innerHTML = results.length
         ? results.map((r) => `

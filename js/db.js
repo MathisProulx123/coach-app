@@ -123,26 +123,39 @@ export async function photoUrl(path) {
   return data?.signedUrl || null;
 }
 
+// Le message d'erreur par défaut d'une fonction Supabase est vague : on lit la vraie raison qu'elle a renvoyée.
+async function edgeError(error) {
+  let msg = error.message;
+  try {
+    const status = error.context?.status;
+    const raw = await error.context.text();
+    let detail = raw;
+    try { const j = JSON.parse(raw); detail = j.error || j.message || j.msg || raw; } catch { /* texte brut */ }
+    msg = `${status ? `[${status}] ` : ''}${detail || msg}`;
+  } catch { /* on garde le message par défaut */ }
+  return new Error(msg);
+}
+
 // ---------- Avis IA (optionnel) ----------
 export async function askCoach(payload) {
   if (DEMO) {
     return 'Mode démo : l’avis IA est désactivé. Une fois Supabase branché et la fonction coach-ai déployée, ton coach IA commentera ici ta semaine en quelques phrases.';
   }
   const { data, error } = await sb.functions.invoke(CONFIG.AI_FUNCTION, { body: payload });
-  if (error) {
-    // Le message par défaut est vague : on lit la vraie raison renvoyée par la fonction.
-    let msg = error.message;
-    try {
-      const status = error.context?.status;
-      const raw = await error.context.text();
-      let detail = raw;
-      try { const j = JSON.parse(raw); detail = j.error || j.message || j.msg || raw; } catch { /* texte brut */ }
-      msg = `${status ? `[${status}] ` : ''}${detail || msg}`;
-    } catch { /* on garde le message par défaut */ }
-    throw new Error(msg);
-  }
+  if (error) throw await edgeError(error);
   if (!data?.text) throw new Error(data?.error || 'Réponse vide du coach IA');
   return data.text;
+}
+
+// ---------- Recherche d'aliments (Open Food Facts, via une fonction Supabase pour rester fiable) ----------
+export async function searchFoods(query) {
+  if (DEMO) {
+    const { searchFoods: direct } = await import('./foodsearch.js');
+    return direct(query); // pas de fonction serveur en mode démo : recherche directe, meilleur effort
+  }
+  const { data, error } = await sb.functions.invoke('food-search', { body: { q: query } });
+  if (error) throw await edgeError(error);
+  return data?.results ?? [];
 }
 
 // ---------- Données de démonstration : un ami fictif avec 6 semaines d'historique ----------
