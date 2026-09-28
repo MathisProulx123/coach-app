@@ -93,6 +93,30 @@ export const listProfiles = () => select('profiles');
 export const getProfile = async (id) => (await select('profiles', { id }))[0] || null;
 export const saveProfile = (p) => upsert('profiles', p, 'id');
 
+// ---------- Amis (partage des données, migration_004) ----------
+// Profils des personnes qui me partagent leurs données. Mode démo : l'ami fictif.
+// Si la migration n'est pas encore appliquée (table absente), on garde l'ancien comportement : tous les autres profils.
+export async function listPartners(uid) {
+  const others = async () => (await listProfiles()).filter((p) => p.id !== uid);
+  if (DEMO) return others();
+  const { data, error } = await sb.from('partages').select('owner').eq('viewer', uid);
+  if (error) return others();
+  const ids = data.map((r) => r.owner);
+  if (!ids.length) return [];
+  const res = await sb.from('profiles').select('*').in('id', ids);
+  if (res.error) throw res.error;
+  return res.data;
+}
+async function rpc(fn, args) {
+  if (DEMO) throw new Error('Les invitations ne marchent pas en mode démo.');
+  const { data, error } = await sb.rpc(fn, args);
+  if (error) throw new Error(error.message);
+  return data;
+}
+export const createInvite = () => rpc('creer_invitation');
+export const acceptInvite = (code) => rpc('accepter_invitation', { code_saisi: code });
+export const removePartner = (id) => rpc('retirer_partage', { autre: id });
+
 export const getPlan = async (user_id) => (await select('plans', { user_id }, ['created_at', false]))[0] || null;
 export const savePlan = (plan) => insert('plans', plan);
 

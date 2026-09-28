@@ -59,6 +59,10 @@ Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec
 
 Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql`, `migration_003.sql`), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).
 
+## Comptes privés et amis (migration_004)
+
+`supabase/migration_004.sql` rend chaque compte privé : on ne voit plus que ses propres données et celles des amis reliés. Vos 2 comptes actuels sont reliés automatiquement (seulement s'il y a au plus 2 profils), donc rien ne change pour vous. Un nouvel utilisateur se relie à un ami dans **Réglages → Partage avec un ami** (code d'invitation valide 7 jours). **À appliquer avant d'ouvrir les inscriptions.** En cas de problème, `migration_004_retour.sql` remet les anciennes règles sans rien effacer.
+
 ## Semaines personnelles
 
 La première semaine de chacun commence le jour de son tout premier check-in (pas forcément un lundi) ; les semaines suivantes s'enchaînent tous les 7 jours à partir de là. Chaque personne a son propre point de départ. Si un premier check-in a été fait par erreur un mauvais jour, supprime cette ligne dans **Table Editor → checkins** et refais le check-in : le bon jour deviendra le nouveau point de départ.
@@ -115,5 +119,5 @@ Les marques sont des exemples courants au Québec et les valeurs nutritives sont
 
 - **Supabase gratuit** : le projet se met en pause après ~1 semaine sans activité (un clic dans le tableau de bord le réveille). Avec un check-in par semaine, ça reste actif.
 - **Stockage** : 1 Go de photos gratuit. Les photos sont réduites à ~100–200 Ko, soit des années d'historique pour vous deux.
-- **Vie privée** : les deux comptes peuvent lire les données de l'autre (c'est voulu). L'option « Partager mes photos » masque les photos dans l'app mais ne les protège pas au niveau de la base.
+- **Vie privée** : depuis `migration_004.sql`, chaque compte ne voit que ses données et celles des amis reliés par un code d'invitation (Réglages → Partage avec un ami). Si « Partager mes photos » est décoché, la base refuse aussi l'accès aux photos.
 - **Ce n'est pas un avis médical.** Les formules (Mifflin-St Jeor, 1,8–2,2 g de protéines/kg) sont des estimations : le vrai réglage vient de vos check-ins.

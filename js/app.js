@@ -26,7 +26,7 @@ async function loadMine() {
   await ensureMealPlan();
 }
 async function loadOther() {
-  const others = (await db.listProfiles()).filter((p) => p.id !== S.me.id);
+  const others = await db.listPartners(S.me.id);
   if (!others.length) { S.other = null; return; }
   const p = others[0];
   const [plan, workouts, daily, checkins] = await Promise.all([
@@ -261,7 +261,7 @@ function vHome() {
          <div class="stat"><b>${os.streak}</b><span>sem. d’affilée</span></div>
          <div class="stat"><b>${os.adh ?? '–'}${os.adh === null ? '' : '%'}</b><span>régularité</span></div></div>
          <a class="btn ghost block" style="margin-top:10px" href="#/progress" data-act="seeOther">Voir son progrès</a>`
-      : '<p class="muted">Ton ami n’a pas encore créé son profil.</p>'}
+      : '<p class="muted">Invite un ami pour suivre vos progrès ensemble.</p><a class="btn ghost block" href="#/settings">Inviter un ami</a>'}
   </section>`;
 }
 
@@ -795,7 +795,7 @@ function vProgress() {
   return `
   <div class="tabs">
     <button class="${mine ? 'on' : ''}" data-act="who" data-arg="me">Moi</button>
-    <button class="${!mine ? 'on' : ''}" data-act="who" data-arg="other">${S.other ? esc(S.other.profile.name) : 'Ami'}</button>
+    ${S.other ? `<button class="${!mine ? 'on' : ''}" data-act="who" data-arg="other">${esc(S.other.profile.name)}</button>` : ''}
   </div>
   <section class="card">
     <h2>${esc(d.profile.name)} · ${GOALS[d.profile.goal]}</h2>
@@ -1041,11 +1041,40 @@ function vSettings() {
     <p class="muted">Chaque exercice a sa propre unité : dans l’onglet Séance, touche le nom d’un exercice (ⓘ) pour choisir kg, lb ou plates juste pour celui-là — pratique quand un haltère est en lb et une machine en kg.</p>
   </section>
   ${profileForm(S.profile)}
+  ${friendCardHtml()}
   <section class="card">
     <p class="muted">Connecté : ${esc(S.me.email)}</p>
     ${db.DEMO ? '<button class="ghost block" data-act="resetDemo">Réinitialiser la démo</button>' : '<button class="ghost block" data-act="logout">Se déconnecter</button>'}
   </section>`;
 }
+function friendCardHtml() {
+  const o = S.other;
+  return `
+  <section class="card">
+    <h2>Partage avec un ami</h2>
+    ${o
+      ? `<p>Tu partages ton progrès avec <b>${esc(o.profile.name)}</b>, et lui ou elle avec toi.</p>
+         <button type="button" class="ghost block" data-act="removePartner">Arrêter de partager</button>`
+      : `<p class="muted">Vos données restent privées. Avec un ami relié, chacun voit le progrès de l’autre (séances, poids, et photos si tu les partages).</p>
+         ${S.invite ? `<p class="invite-code">${esc(S.invite)}</p><p class="muted center">Donne ce code à ton ami (valide 7 jours).</p>`
+           : '<button type="button" class="block" data-act="createInvite">Créer un code d’invitation</button>'}
+         <form data-form="joinFriend" class="row" style="margin-top:12px">
+           <input name="code" placeholder="J’ai reçu un code" autocomplete="off" required>
+           <button class="ghost">Valider</button>
+         </form>`}
+  </section>`;
+}
+acts.createInvite = async () => {
+  try { S.invite = await db.createInvite(); render(); } catch (e) { toast(e.message); }
+};
+acts.removePartner = async () => {
+  if (!confirm(`Arrêter de partager avec ${S.other.profile.name} ? Aucun de vous deux ne verra plus le progrès de l’autre.`)) return;
+  try { await db.removePartner(S.other.profile.id); S.who = 'me'; toast('Partage arrêté'); await refresh(); } catch (e) { toast(e.message); }
+};
+forms.joinFriend = async (form) => {
+  try { await db.acceptInvite(String(new FormData(form).get('code'))); S.invite = null; toast('Vous êtes reliés 🎉'); await refresh(); }
+  catch (e) { toast(e.message); }
+};
 acts.setUnit = async (el) => {
   try { await setFoodPrefs({ weight_unit: el.dataset.arg }); toast(`Poids affichés en ${el.dataset.arg}`); render(); }
   catch (e) { toast(e.message); }
