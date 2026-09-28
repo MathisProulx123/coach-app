@@ -53,10 +53,9 @@ async function ensureMealPlan() {
 }
 const prefs = () => ({
   allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '',
-  load_units: {}, plate_lb: 45, bar_lb: 45, training_purpose: 'fitness', training_style: 'hypertrophy',
+  load_units: {}, plate_lb: 45, bar_lb: 45, training_goal_text: '', training_goal_ai: '', training_style: 'hypertrophy',
   ...(S.profile?.food_prefs || {}),
 });
-const TRAINING_PURPOSES = { lose_weight: 'Perdre du poids', fitness: 'Être en forme', bodybuilder: 'Bodybuilding' };
 const TRAINING_STYLES = {
   strength: 'Force (peu de répétitions)', hypertrophy: 'Hypertrophie (6 à 10 répétitions)', endurance: 'Endurance musculaire (10+ répétitions)',
 };
@@ -879,7 +878,7 @@ function aiContext() {
     profil: {
       objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
       poids_kg: lastWeight(), unite_poids_affichee: wUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
-      but_entrainement: TRAINING_PURPOSES[pr.training_purpose], type_entrainement: TRAINING_STYLES[pr.training_style],
+      but_entrainement_en_ses_mots: pr.training_goal_text || 'non précisé', type_entrainement: TRAINING_STYLES[pr.training_style],
       objectif_chiffre: goalStatus(profileWithGoal(), lastWeight()) ?? 'aucun poids/date visés fixés',
     },
     nutrition: {
@@ -995,11 +994,13 @@ function profileForm(p = {}, label = 'Enregistrer') {
       <div><label>Jours d’entraînement / semaine</label><select name="days_per_week">${[2, 3, 4, 5, 6].map((n) => opt(String(n), n, String(p.days_per_week ?? 4))).join('')}</select></div>
       <div><label>Matériel</label><select name="equipment">${opt('gym', 'Salle de sport', p.equipment)}${opt('home', 'Maison (haltères)', p.equipment)}</select></div>
     </div>
-    <label>But de l’entraînement</label>
-    <select name="training_purpose">${Object.entries(TRAINING_PURPOSES).map(([k, v]) => opt(k, v, pr.training_purpose)).join('')}</select>
+    <label>Ton but avec l’entraînement, en tes mots</label>
+    <textarea name="training_goal_text" rows="3" maxlength="600" placeholder="ex. je veux surtout être en forme et avoir plus d’énergie au quotidien, sans nécessairement viser un gros physique">${esc(pr.training_goal_text)}</textarea>
     <label>Tu cherches plutôt…</label>
     <select name="training_style">${Object.entries(TRAINING_STYLES).map(([k, v]) => opt(k, v, pr.training_style)).join('')}</select>
-    <p class="muted">Change les fourchettes de répétitions de tout ton programme (ex. squat en 3–5 pour la force, 9–14 pour l’endurance).</p>
+    <p class="muted">Le type choisi change les fourchettes de répétitions de tout ton programme (ex. squat en 3–5 pour la force, 9–14 pour l’endurance). Le coach IA lit aussi ce que tu as écrit ci-dessus pour mieux te conseiller.</p>
+    ${canAI() ? `<button type="button" class="ghost block" style="margin-top:8px" data-act="askGoal">Demander l’avis du coach IA sur mon but</button>
+    ${pr.training_goal_ai ? `<p class="msg"><span>💬</span><span>${esc(pr.training_goal_ai)}</span></p>` : ''}` : ''}
     <label>Activité hors entraînement</label>
     <select name="activity">${opt('low', 'Surtout assis', p.activity)}${opt('medium', 'Assez actif', p.activity ?? 'medium')}${opt('high', 'Très actif / travail physique', p.activity)}</select>
     <label>Blessures ou exercices à éviter (optionnel)</label>
@@ -1119,6 +1120,22 @@ acts.askAI = async (el) => {
     await refresh();
   } catch (e) { toast('Avis IA indisponible : ' + e.message); el.disabled = false; el.textContent = 'Demander un avis'; }
 };
+acts.askGoal = async (el) => {
+  const text = el.form.training_goal_text.value.trim();
+  if (!text) return toast('Écris d’abord ton but dans le champ ci-dessus.');
+  el.disabled = true; el.textContent = 'Le coach réfléchit…';
+  try {
+    const reply = await db.askCoach({
+      messages: [{ role: 'user', text: `Voici ce que la personne a écrit sur son but avec l’entraînement, dans ses mots : « ${text} ». En 3 à 6 phrases, dis-lui si son plan actuel (jours, matériel, type d’entraînement, nutrition) correspond bien à ce but, et propose un ou deux réglages concrets à changer dans l’app si besoin (avec le nom exact du bouton).` }],
+      context: aiContext(),
+    });
+    const food_prefs = { ...prefs(), training_goal_text: text, training_goal_ai: reply };
+    await db.saveProfile({ ...S.profile, food_prefs });
+    S.profile = { ...S.profile, food_prefs };
+    toast('Avis reçu');
+    render();
+  } catch (e) { toast('Avis IA indisponible : ' + e.message); el.disabled = false; el.textContent = 'Demander l’avis du coach IA sur mon but'; }
+};
 
 // ================= Formulaires =================
 forms.auth = async (form) => {
@@ -1141,9 +1158,11 @@ forms.profile = async (form) => {
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
   const oldPr = prefs();
+  const goalText = String(fd.training_goal_text || '').trim().slice(0, 600);
   p.food_prefs = {
     ...oldPr, goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, wUnit(old)) : null, goal_date: fd.goal_date || '',
-    training_purpose: fd.training_purpose, training_style: fd.training_style,
+    training_goal_text: goalText, training_style: fd.training_style,
+    training_goal_ai: goalText === oldPr.training_goal_text ? oldPr.training_goal_ai : '', // texte changé : l'ancien avis n'est plus à jour
   };
   const programChanged = !!old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment || oldPr.training_style !== p.food_prefs.training_style);
   if (programChanged && !confirm('Changer les jours, le matériel ou le type d’entraînement remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
