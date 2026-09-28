@@ -1221,6 +1221,12 @@ function vSettings() {
   ${profileForm(S.profile)}
   ${friendCardHtml()}
   <section class="card">
+    <h2>Mes données</h2>
+    <p class="muted">Tes données t’appartiennent : tu peux les télécharger ou tout supprimer, quand tu veux.</p>
+    <button type="button" class="ghost block" data-act="exportData">Télécharger mes données</button>
+    <button type="button" class="ghost block danger" data-act="deleteAccount">Supprimer mon compte</button>
+  </section>
+  <section class="card">
     <p class="muted">Connecté : ${esc(S.me.email)}</p>
     ${db.DEMO ? '<button class="ghost block" data-act="resetDemo">Réinitialiser la démo</button>' : '<button class="ghost block" data-act="logout">Se déconnecter</button>'}
   </section>`;
@@ -1240,6 +1246,31 @@ function friendCardHtml() {
     </form>
   </section>`;
 }
+acts.exportData = async () => {
+  try {
+    const data = await db.exportMine(S.me.id);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    a.download = `coach-mes-donnees-${today()}.json`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Données téléchargées');
+  } catch (e) { toast(e.message); }
+};
+acts.deleteAccount = async (el) => {
+  const ok = await askConfirm('Supprimer définitivement ton compte ? Ton profil, tes plans, tes séances, tes check-ins et tes photos seront effacés, et tes amis ne te verront plus. Impossible de revenir en arrière.', 'Supprimer définitivement', 'Garder mon compte');
+  if (!ok) return;
+  el.disabled = true; el.textContent = 'Suppression…';
+  try {
+    const uid = S.me.id;
+    await db.deleteAccount(uid);
+    // Ce que l'app gardait sur cet appareil pour ce compte (conversation, brouillons)
+    try { Object.keys(localStorage).filter((k) => k.endsWith(`_${uid}`) || k.includes(`_${uid}_`)).forEach((k) => localStorage.removeItem(k)); } catch { /* rien à nettoyer */ }
+    S.me = db.DEMO ? await db.getUser() : null; S.profile = null; S.onb = null; S.others = [];
+    toast('Compte supprimé');
+    if (db.DEMO) { location.hash = '#/home'; location.reload(); } else render();
+  } catch (e) { toast(e.message); el.disabled = false; el.textContent = 'Supprimer mon compte'; }
+};
 acts.createInvite = async () => {
   try { S.invite = await db.createInvite(); render(); } catch (e) { toast(e.message); }
 };

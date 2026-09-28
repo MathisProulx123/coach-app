@@ -216,3 +216,4 @@ input.mini { width: 58px; padding: 6px; text-align: center; }
 .modal .dialog p { margin: 0 0 16px; font-size: 16px; }
 .modal .row { justify-content: flex-end; flex-wrap: wrap; }
 .friend-row { padding: 10px 0; border-top: 1px solid var(--line); }
+button.ghost.danger, .btn.ghost.danger { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }

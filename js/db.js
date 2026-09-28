@@ -129,6 +129,27 @@ export const saveDaily = (d) => upsert('daily_logs', d, 'user_id,date');
 export const listCheckins = (user_id) => select('checkins', { user_id }, ['week_start', true]);
 export const saveCheckin = (c) => upsert('checkins', c, 'user_id,week_start');
 
+// ---------- Mes données (Loi 25) : exporter, supprimer ----------
+export async function exportMine(uid) {
+  const [profile, plans, workouts, daily_logs, checkins] = await Promise.all([
+    getProfile(uid), select('plans', { user_id: uid }, ['created_at', true]), listWorkouts(uid), listDaily(uid), listCheckins(uid),
+  ]);
+  return { exporte_le: new Date().toISOString(), profile, plans, workouts, daily_logs, checkins };
+}
+// Efface les photos (le stockage n'est pas lié au compte), puis le compte : la base efface tout le reste en cascade.
+export async function deleteAccount(uid) {
+  if (DEMO) { resetDemo(); return; }
+  const { data: files, error } = await sb.storage.from('photos').list(uid, { limit: 1000 });
+  if (error) throw error;
+  if (files?.length) {
+    const { error: e2 } = await sb.storage.from('photos').remove(files.map((f) => `${uid}/${f.name}`));
+    if (e2) throw e2;
+  }
+  const { error: e3 } = await sb.rpc('supprimer_mon_compte');
+  if (e3) throw new Error(/supprimer_mon_compte/.test(e3.message) ? 'La suppression de compte n’est pas encore activée (migration_006.sql).' : e3.message);
+  await sb.auth.signOut();
+}
+
 // ---------- Photos ----------
 export async function uploadPhoto(uid, week, slot, blob) {
   const path = `${uid}/${week}_${slot}.jpg`;
