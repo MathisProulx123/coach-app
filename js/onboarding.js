@@ -67,7 +67,7 @@ Réponds UNIQUEMENT avec un objet JSON, sans texte autour : {"reply": "ta phrase
 - goal : "lose" (perdre du gras), "maintain" (maintenir, être en forme) ou "gain" (prendre du muscle)
 - goal_weight_kg et goal_date ("AAAA-MM-JJ") seulement si la personne donne un poids ou une date visés
 - days_per_week (2 à 6), equipment ("gym" ou "home"), activity ("low" surtout assis, "medium", "high" travail physique)
-- limitations (blessures, douleurs, exercices à éviter), training_goal_text (son but en ses mots, résumé)
+- limitations (blessures, douleurs, exercices à éviter), training_goal_text (son but en ses mots, résumé en bon français)
 - training_style : "strength" (force), "hypertrophy" (muscle, par défaut) ou "endurance"
 - diet : ${Object.keys(DIETS).map((k) => `"${k}"`).join(', ')} ; allergies : liste parmi ${Object.keys(ALLERGENS).map((k) => `"${k}"`).join(', ')}
 - dislikes (aliments à éviter, séparés par des virgules), meals (3 à 6 repas par jour), budget ("serre", "normal" ou "genereux")
@@ -79,28 +79,41 @@ Mets "done": true quand tu connais au moins prénom, sexe, âge, taille, poids, 
 // message fictif, on retire les messages d'erreur, on fusionne deux messages consécutifs du même côté, et on ne garde
 // que la fin (le serveur n'en lit que 12 ; le brouillon garde de toute façon ce qui a été appris avant).
 export function onboardPayload(hist, draft) {
+  // Les réponses du coach sont renvoyées dans leur JSON d'origine (m.raw) : s'il voit ses tours précédents en texte
+  // simple, Gemini l'imite et oublie le format demandé.
   const msgs = [];
   for (const m of [{ r: 'user', t: 'Bonjour, je viens de créer mon compte.' }, ...hist.filter((x) => !x.err)]) {
     const role = m.r === 'user' ? 'user' : 'model';
+    const text = role === 'model' ? (m.raw || JSON.stringify({ reply: m.t })) : m.t;
     const prev = msgs[msgs.length - 1];
-    if (prev && prev.role === role) prev.text += `\n${m.t}`; else msgs.push({ role, text: m.t });
+    if (prev && prev.role === role) prev.text += `\n${text}`; else msgs.push({ role, text });
   }
   let tail = msgs.slice(1);
   while (tail.length > 11 || tail[0]?.role === 'user') tail = tail.slice(1);
+  const out = [msgs[0], ...tail].map((m) => ({ ...m }));
+  out[out.length - 1].text += '\n\n(Réponds uniquement avec l’objet JSON {"reply", "draft", "done"} décrit dans la consigne.)';
   return {
-    messages: [msgs[0], ...tail],
+    messages: out,
     context: { consigne_accueil: CONSIGNE, brouillon_actuel: draft, annee_actuelle: new Date().getFullYear() },
     format: 'json',
   };
 }
 
 // L'IA répond normalement en JSON pur ; on tolère un bloc de code autour, ou du texte avant/après l'objet.
+// Si le coach répond quand même en texte simple, on garde sa phrase (sans rien ajouter au brouillon) plutôt que
+// d'afficher une erreur : il reprend tout ce qu'il sait au tour suivant. raw = ce qu'on lui renverra dans l'historique.
 export function parseReply(text) {
   const raw = String(text).trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();
   const a = raw.indexOf('{'), b = raw.lastIndexOf('}');
-  const j = JSON.parse(a >= 0 && b > a ? raw.slice(a, b + 1) : raw);
-  if (typeof j.reply !== 'string' || !j.reply.trim()) throw new Error('Réponse sans message');
-  return { reply: j.reply.trim(), draft: j.draft && typeof j.draft === 'object' ? j.draft : {}, done: !!j.done };
+  let j;
+  try { j = JSON.parse(a >= 0 && b > a ? raw.slice(a, b + 1) : raw); } catch { j = null; }
+  if (!j) {
+    if (!raw || raw.startsWith('{')) throw new SyntaxError('Réponse illisible'); // JSON coupé : vraie erreur
+    return { reply: raw, draft: {}, done: false, raw: JSON.stringify({ reply: raw, draft: {}, done: false }) };
+  }
+  if (typeof j.reply !== 'string' || !j.reply.trim()) throw new SyntaxError('Réponse sans message');
+  const draft = j.draft && typeof j.draft === 'object' ? j.draft : {};
+  return { reply: j.reply.trim(), draft, done: !!j.done, raw: JSON.stringify({ reply: j.reply.trim(), draft, done: !!j.done }) };
 }
 
 // ---------- Faux coach du MODE DÉMO (sans IA) ----------

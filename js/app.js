@@ -1171,7 +1171,7 @@ function onbChatHtml(o) {
       ${o.busy ? '<div class="bubble ai">…</div>' : ''}
     </div>
     <form data-form="onbChat" class="chatform">
-      <textarea name="q" rows="2" placeholder="Ta réponse…" required ${o.busy ? 'disabled' : ''}></textarea>
+      <textarea name="q" rows="2" placeholder="Ta réponse…" required ${o.busy ? 'disabled' : ''}>${esc(o.retry || '')}</textarea>
       <button ${o.busy ? 'disabled' : ''}>Envoyer</button>
     </form>
     ${db.DEMO ? '<p class="muted" style="margin-top:10px">Mode démo : coach scripté (sans IA), pour tester le parcours.</p>' : ''}
@@ -1224,11 +1224,17 @@ forms.onbChat = async (form) => {
       : parseReply(await db.askCoach(onboardPayload(o.hist, o.draft)));
     o.draft = mergeDraft(o.draft, res.draft);
     o.done = res.done;
-    o.hist.push({ r: 'ai', t: res.reply });
+    o.hist.push({ r: 'ai', t: res.reply, raw: res.raw });
+    o.retry = '';
   } catch (e) {
     const why = /quota/i.test(e.message) ? 'le coach a atteint la limite gratuite de Google pour le moment'
-      : e instanceof SyntaxError ? 'je me suis mélangé dans ma réponse' : e.message;
-    // Message d'erreur affiché mais jamais renvoyé à l'IA (err: true). La réponse de la personne est gardée.
+      : e instanceof SyntaxError ? 'je me suis mélangé dans ma réponse'
+      : /trop de temps|surcharg|high demand|overload/i.test(e.message) ? 'Google est surchargé en ce moment' : e.message.replace(/\.+$/, '');
+    // Le message de la personne revient dans la zone de saisie (pas de doublon dans l'historique) ; l'erreur est
+    // affichée mais jamais renvoyée à l'IA (err: true), et la précédente est remplacée.
+    o.hist.pop();
+    if (o.hist[o.hist.length - 1]?.err) o.hist.pop();
+    o.retry = q;
     o.hist.push({ r: 'ai', t: `Oups, ${why}. Renvoie ton message dans un instant, ou passe au récapitulatif pour remplir le reste toi-même.`, err: true });
   }
   o.busy = false;
