@@ -118,8 +118,11 @@ function toast(msg) {
 const bar = (v, t) => `<div class="bar"><i style="width:${Math.min(100, t ? (v / t) * 100 : 0)}%"></i></div>`;
 const GOALS = { lose: 'Perdre du gras', maintain: 'Maintenir', gain: 'Prendre du muscle' };
 const LEVEL5 = ['1 · Très bas', '2 · Bas', '3 · Correct', '4 · Bon', '5 · Excellent'];
+// Exercice qu'on tient (planche…) : la 1re photo de la base est la position de départ (à genoux, couché),
+// seule la 2e montre la position tenue.
+const mainImg = (id) => (EXERCISES[id]?.time ? 1 : 0);
 const thumb = (id) => EXERCISES[id]
-  ? `<img class="thumb" loading="lazy" src="${imgUrl(id, 0)}" data-fb="${imgFallback(id, 0)}" alt="">`
+  ? `<img class="thumb" loading="lazy" src="${imgUrl(id, mainImg(id))}" data-fb="${imgFallback(id, mainImg(id))}" alt="">`
   : '<div class="thumb ph" aria-hidden="true">🏋️</div>';
 
 // Un exercice du programme peut venir de la bibliothèque ou être créé par la personne (définition dans e.custom).
@@ -190,6 +193,26 @@ const sheetEl = document.createElement('div');
 sheetEl.id = 'sheet';
 sheetEl.hidden = true;
 document.body.appendChild(sheetEl);
+// Fenêtre de confirmation de l'app (remplace confirm() du navigateur : plus lisible, et marche partout,
+// y compris là où le navigateur bloque ses propres fenêtres). Renvoie une promesse : true si la personne confirme.
+function askConfirm(text, ok = 'Confirmer', cancel = 'Annuler') {
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'modal';
+    el.innerHTML = `<div class="backdrop"></div>
+      <div class="dialog" role="alertdialog" aria-modal="true"><p>${esc(text)}</p>
+        <div class="row"><button type="button" class="ghost" data-r="0">${esc(cancel)}</button><button type="button" data-r="1">${esc(ok)}</button></div></div>`;
+    const done = (v) => { el.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') done(false); };
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-r]');
+      if (b) done(b.dataset.r === '1'); else if (e.target.classList.contains('backdrop')) done(false);
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.append(el);
+    el.querySelector('[data-r="1"]').focus();
+  });
+}
 function openSheet(html) {
   sheetEl.innerHTML = `<div class="backdrop" data-act="closeSheet"></div><div class="panel">${html}</div>`;
   sheetEl.hidden = false;
@@ -344,7 +367,7 @@ function exInfoHtml(id) {
   const fig = (n, label) => `<figure><img src="${imgUrl(id, n)}" data-fb="${imgFallback(id, n)}" alt="${label} : ${esc(ex.name)}"><figcaption>${label}</figcaption></figure>`;
   return `
     <div class="row between"><h2>${esc(ex.name)}</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <div class="photos one">${fig(0, 'Départ')}${fig(1, 'Arrivée')}</div>
+    <div class="photos one">${ex.time ? fig(1, 'Position à tenir') : `${fig(0, 'Départ')}${fig(1, 'Arrivée')}`}</div>
     <p>${esc(ex.cue)}</p>
     <button class="ghost block" data-act="exAlts" data-arg="${id}">Je ne peux pas / n’aime pas cet exercice : voir les variantes</button>
     <p class="muted">Photos : Free Exercise DB (domaine public).</p>
@@ -446,9 +469,9 @@ function editField(t) {
   render();
 }
 acts.dayMove = (el) => { move(S.draft, dOf(el), +el.dataset.dir); render(); };
-acts.delDay = (el) => {
+acts.delDay = async (el) => {
   if (S.draft.length <= 1) return toast('Garde au moins un jour d’entraînement.');
-  if (!confirm('Supprimer ce jour et ses exercices ?')) return;
+  if (!(await askConfirm('Supprimer ce jour et ses exercices ?', 'Supprimer le jour'))) return;
   S.draft.splice(dOf(el), 1);
   render();
 };
@@ -532,8 +555,8 @@ acts.saveProgram = async () => {
   } catch (e) { toast(e.message); }
 };
 acts.cancelEdit = () => { S.draft = null; location.hash = '#/train'; };
-acts.resetProgram = () => {
-  if (!confirm('Remplacer ton programme par celui de départ ? Tes modifications (dans ce brouillon) seront perdues.')) return;
+acts.resetProgram = async () => {
+  if (!(await askConfirm('Remplacer ton programme par celui de départ ? Tes modifications (dans ce brouillon) seront perdues.', 'Remplacer'))) return;
   S.draft = buildProgram(S.profile.days_per_week, S.profile.equipment, prefs().training_style);
   render();
 };
@@ -986,7 +1009,8 @@ function actionCardHtml(m, i, canUndo) {
   if (m.status === 'applied' || m.status === 'undone') {
     return `<div class="actions-card done"><b>${m.status === 'applied' ? '✅ Changements appliqués' : '↩️ Changements annulés'}</b>
       <ul>${(m.done || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
-      ${m.status === 'applied' && canUndo ? `<button type="button" class="ghost small" data-act="undoActions" data-i="${i}">Annuler ces changements</button>` : ''}</div>`;
+      ${m.status !== 'applied' ? '' : canUndo ? `<button type="button" class="ghost small" data-act="undoActions" data-i="${i}">Annuler ces changements</button>`
+        : '<span class="muted">Pour revenir en arrière, demande-le au coach.</span>'}</div>`;
   }
   if (m.status === 'declined') return `<div class="actions-card done"><b>Changements refusés</b><ul>${(m.labels || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
   const { items, valid } = planActions(m.actions, actionState()); // revérifié sur l'état actuel à chaque affichage
@@ -1016,7 +1040,8 @@ acts.applyActions = async (el) => {
     if (st.regenMeals || !meal_plan) meal_plan = st.prefs.done ? buildChoices(st.prefs, Date.now(), st.plan) : null;
     for (const k of st.rerolls || []) meal_plan = rerollMeal(meal_plan, k, st.prefs, dayVariant(st.plan, todayLog().day_type === 'rest' ? 'rest' : 'train'));
     await savePlan({ ...st.plan, meal_plan, reasons: [{ icon: '💬', text: `Changé avec le coach IA : ${done.join(' ; ')}` }] });
-    hist.forEach((x) => { delete x.undo; }); // on ne peut annuler que le dernier changement
+    // Pile d'annulation : on annule du plus récent au plus ancien (5 retours en arrière au maximum).
+    hist.filter((x) => x.undo).slice(0, -4).forEach((x) => { delete x.undo; });
     Object.assign(m, { status: 'applied', done, undo });
     chatSave(hist);
     toast('Changements appliqués');
@@ -1032,7 +1057,7 @@ acts.declineActions = (el) => {
 };
 acts.undoActions = async (el) => {
   const hist = chatLoad(), m = hist[+el.dataset.i];
-  if (!m?.undo || !confirm('Revenir à ce que tu avais avant ces changements ?')) return;
+  if (!m?.undo || !(await askConfirm('Revenir à ce que tu avais avant ces changements ?', 'Oui, revenir en arrière', 'Garder'))) return;
   try {
     await db.saveProfile(m.undo.profile);
     S.profile = m.undo.profile;
@@ -1190,7 +1215,7 @@ acts.createInvite = async () => {
   try { S.invite = await db.createInvite(); render(); } catch (e) { toast(e.message); }
 };
 acts.removePartner = async () => {
-  if (!confirm(`Arrêter de partager avec ${S.other.profile.name} ? Aucun de vous deux ne verra plus le progrès de l’autre.`)) return;
+  if (!(await askConfirm(`Arrêter de partager avec ${S.other.profile.name} ? Aucun de vous deux ne verra plus le progrès de l’autre.`, 'Arrêter de partager'))) return;
   try { await db.removePartner(S.other.profile.id); S.who = 'me'; toast('Partage arrêté'); await refresh(); } catch (e) { toast(e.message); }
 };
 forms.joinFriend = async (form) => {
@@ -1336,9 +1361,9 @@ acts.addAllergy = (el) => {
   filterAllergies(input);
 };
 acts.onbMode = (el) => { S.onb.mode = el.dataset.arg; onbSave(); renderOnboarding(); window.scrollTo(0, 0); };
-acts.onbRestart = (el, e) => {
+acts.onbRestart = async (el, e) => {
   e.preventDefault();
-  if (!confirm('Recommencer la discussion depuis le début ?')) return;
+  if (!(await askConfirm('Recommencer la discussion depuis le début ?', 'Recommencer'))) return;
   S.onb = onbNew(); onbSave(); renderOnboarding();
 };
 forms.onbChat = async (form) => {
@@ -1525,7 +1550,7 @@ forms.profile = async (form) => {
   const oldPr = prefs();
   const p = readProfile(fd, old, oldPr);
   const programChanged = !!old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment || oldPr.training_style !== p.food_prefs.training_style);
-  if (programChanged && !confirm('Changer les jours, le matériel ou le type d’entraînement remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
+  if (programChanged && !(await askConfirm('Changer les jours, le matériel ou le type d’entraînement remplace ton programme actuel, y compris tes modifications. Continuer ?', 'Remplacer mon programme'))) return;
   try {
     if (!old) return await createStart(p);
     await db.saveProfile(p);
