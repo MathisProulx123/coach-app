@@ -958,7 +958,8 @@ async function ask(q, photos = []) {
     text = faq(q) ?? FAQ_DEFAULT;
   } else {
     const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext(), photos };
-    const transient = (e) => /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
+    const limited = (e) => /limite quotidienne/i.test(e.message); // limite par personne : inutile de réessayer
+    const transient = (e) => !limited(e) && /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
     try {
       try {
         text = await db.askCoach(payload);
@@ -969,7 +970,9 @@ async function ask(q, photos = []) {
       }
     } catch (e) {
       const help = faq(q);
-      text = `${help ? `${help}\n\n` : ''}Le coach IA est momentanément indisponible, réessaie dans quelques instants.\n(${e.message})`;
+      text = limited(e)
+        ? `${help ? `${help}\n\n` : ''}${e.message.replace(/^\[429\]\s*/, '')}`
+        : `${help ? `${help}\n\n` : ''}Le coach IA est momentanément indisponible, réessaie dans quelques instants.\n(${e.message})`;
     }
   }
   hist.push({ r: 'ai', t: text });

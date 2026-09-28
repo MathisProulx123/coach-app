@@ -55,6 +55,8 @@ Sans l'IA, l'onglet **Coach** répond déjà aux questions sur l'application (mo
 
 Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec le nouveau nom. L'offre gratuite a une limite de messages par minute et par jour.
 
+**Sécurité et limite par personne.** La fonction vérifie qui l'appelle et n'analyse que les photos de cette personne. Avec `supabase/migration_005.sql` appliquée, chaque compte a droit à 80 messages IA par jour (modifiable avec un secret `AI_DAILY_LIMIT`). Sans cette migration, la fonction marche sans limite.
+
 ## Mise à jour de la base (migration)
 
 Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql`, `migration_003.sql`), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).

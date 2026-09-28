@@ -1,21 +1,23 @@
 // Coach IA de l'application, via l'offre gratuite de Google Gemini.
-// La clé Gemini reste secrète côté Supabase (jamais dans l'app). Seuls les utilisateurs connectés peuvent appeler la fonction.
+// La clé Gemini reste secrète côté Supabase (jamais dans l'app). Seuls les utilisateurs connectés peuvent appeler la fonction :
+// la fonction vérifie elle-même qui appelle (jeton de session), puis applique une limite de messages par jour et par personne.
 // Déploiement : voir README, section « Coach IA ».
 //
 // Reçoit : { messages: [{ role: 'user' | 'model', text }], context: {...}, photos?: [{ path, label }] }
 // Renvoie : { text }
 //
 // Les photos : le client envoie seulement leur CHEMIN dans le stockage (jamais les octets). Cette fonction va les
-// chercher elle-même dans le bucket privé « photos » avec la clé service_role (jamais exposée au navigateur),
-// donc les règles de sécurité normales (chacun ne voit que ses photos) ne s'appliquent pas ici : c'est voulu,
-// puisque c'est la personne elle-même qui demande l'analyse de SES photos.
+// chercher elle-même dans le bucket privé « photos » avec la clé service_role (jamais exposée au navigateur).
+// Comme cette clé passe outre les règles de sécurité, on n'accepte QUE les photos du dossier de la personne qui appelle.
+//
+// Secrets optionnels : GEMINI_MODEL (nom du modèle), AI_DAILY_LIMIT (messages par jour et par personne, 80 par défaut).
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const SYSTEM = `Tu es le coach d'une application d'entraînement et de nutrition utilisée par deux amis. Réponds toujours en français, de façon claire, chaleureuse et concrète, en 3 à 8 phrases (plus seulement si on te demande un plan détaillé). Évite le jargon.
+const SYSTEM = `Tu es le coach d'une application d'entraînement et de nutrition. Réponds toujours en français, de façon claire, chaleureuse et concrète, en 3 à 8 phrases (plus seulement si on te demande un plan détaillé). Évite le jargon.
 
 Tu connais le profil, le plan de repas (avec sa variante jour d'entraînement / jour de repos), le programme et les derniers check-ins de la personne (JSON fourni). Base-toi dessus et n'invente jamais de données. Si une information manque, dis-le.
 
@@ -41,6 +43,34 @@ const MODELS = [Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash', 'gemini-flas
 // SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis automatiquement à chaque fonction Supabase : rien à configurer.
 const SUPA_URL = Deno.env.get('SUPABASE_URL');
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? 80);
+
+const json = (obj: unknown, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+
+// Qui appelle ? On demande à Supabase Auth de valider le jeton de session envoyé par l'app.
+async function callerId(req: Request): Promise<string | null> {
+  const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  const r = await fetch(`${SUPA_URL}/auth/v1/user`, {
+    headers: { Authorization: `Bearer ${token}`, apikey: Deno.env.get('SUPABASE_ANON_KEY') ?? SERVICE_KEY! },
+  });
+  if (!r.ok) return null;
+  const u = await r.json().catch(() => null);
+  return typeof u?.id === 'string' ? u.id : null;
+}
+
+// Compte ce message ; renvoie le total du jour, ou null si le compteur n'existe pas encore (migration_005 pas appliquée).
+async function countMessage(uid: string): Promise<number | null> {
+  const r = await fetch(`${SUPA_URL}/rest/v1/rpc/ia_compter`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY!, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid }),
+  });
+  if (!r.ok) return null;
+  const n = await r.json().catch(() => null);
+  return typeof n === 'number' ? n : null;
+}
 
 async function photoPart(path: string) {
   const r = await fetch(`${SUPA_URL}/storage/v1/object/photos/${path}`, {
@@ -57,6 +87,13 @@ async function photoPart(path: string) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
+    const uid = await callerId(req);
+    if (!uid) return json({ error: 'Connecte-toi pour parler au coach.' }, 401);
+    const used = await countMessage(uid);
+    if (used !== null && used > DAILY_LIMIT) {
+      return json({ error: `Limite quotidienne du coach IA atteinte (${DAILY_LIMIT} messages). Reviens demain !` }, 429);
+    }
+
     const body = await req.json();
     const key = Deno.env.get('GEMINI_API_KEY');
     if (!key) throw new Error('GEMINI_API_KEY manquante');
@@ -76,7 +113,8 @@ Deno.serve(async (req) => {
     if (photos.length) {
       const last = contents[contents.length - 1];
       for (const { path, label } of photos) {
-        if (typeof path !== 'string') continue;
+        // Seulement les photos de la personne qui appelle (dossier = son identifiant), sans « .. » pour sortir du dossier.
+        if (typeof path !== 'string' || !path.startsWith(`${uid}/`) || path.includes('..')) continue;
         const part = await photoPart(path);
         if (part) last.parts.push({ text: String(label ?? 'Photo').slice(0, 100) + ' :' }, part);
       }
@@ -109,8 +147,8 @@ Deno.serve(async (req) => {
       }
     }
     if (!text) throw new Error(lastError);
-    return new Response(JSON.stringify({ text }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+    return json({ text });
   } catch (e) {
-    return new Response(JSON.stringify({ error: String((e as Error).message ?? e) }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
+    return json({ error: String((e as Error).message ?? e) }, 500);
   }
 });
