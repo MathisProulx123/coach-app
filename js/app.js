@@ -1091,21 +1091,34 @@ forms.plateSettings = async (form) => {
 
 const routes = { home: vHome, train: vTrain, edit: vEdit, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
 const TITLES = { home: 'Accueil', train: 'Entraînement', edit: 'Mon programme', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
-const TABS = [['home', '🏠', 'Accueil'], ['train', '🏋️', 'Séance'], ['food', '🍽️', 'Repas'], ['checkin', '📝', 'Check-in'], ['progress', '📈', 'Progrès'], ['coach', '💬', 'Coach']];
+const TABS = [['home', 'home', 'Accueil'], ['train', 'dumbbell', 'Séance'], ['food', 'food', 'Repas'], ['checkin', 'check', 'Check-in'], ['progress', 'trend', 'Progrès'], ['coach', 'chat', 'Coach']];
+// Icônes (traits, 24×24), dessinées en SVG pour un rendu net et identique sur tous les téléphones.
+const ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11h14V9"/><path d="M10 20v-6h4v6"/>',
+  dumbbell: '<path d="M6.5 6v12M17.5 6v12M3 9.5v5M21 9.5v5M6.5 12h11"/>',
+  food: '<path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11"/><path d="M18 21V3c-2.2 1.2-3.5 3.8-3.5 7.5V14H18"/>',
+  check: '<rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 3h6v3H9z"/><path d="m9 13.5 2 2 4-4"/>',
+  trend: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  chat: '<path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.5L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/>',
+  gear: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  pulse: '<path d="M3 12h4l2.5-6 5 12L17 12h4"/>',
+};
+const icon = (k) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
+const brandHtml = (sub) => `<div class="brand"><div class="logo">${icon('pulse')}</div><h1>Coach</h1><p>${sub}</p></div>`;
 
 // ================= Rendu =================
 function render() {
   if (!S.me) return renderAuth();
   if (!S.profile) return renderOnboarding();
   root.innerHTML = `${db.DEMO ? '<div class="demo">Mode démo : les données restent sur cet appareil</div>' : ''}
-    <header><h1>${TITLES[S.view]}</h1><a href="#/settings" aria-label="Réglages">⚙️</a></header>
+    <header><h1>${TITLES[S.view]}</h1><a href="#/settings" aria-label="Réglages">${icon('gear')}</a></header>
     <main>${routes[S.view]()}</main>
-    <nav>${TABS.map(([k, i, t]) => `<a href="#/${k}" class="${S.view === k || (k === 'train' && S.view === 'edit') ? 'on' : ''}"><b>${i}</b>${t}</a>`).join('')}</nav>`;
+    <nav>${TABS.map(([k, i, t]) => `<a href="#/${k}" class="${S.view === k || (k === 'train' && S.view === 'edit') ? 'on' : ''}"><span class="ico">${icon(i)}</span>${t}</a>`).join('')}</nav>`;
   hydratePhotos();
 }
 function renderAuth() {
   const up = S.authMode === 'up';
-  root.innerHTML = `<div class="auth"><form data-form="auth" class="card">
+  root.innerHTML = `<div class="auth">${brandHtml('Ton entraînement, tes repas et ton suivi, ajustés chaque semaine.')}<form data-form="auth" class="card">
     <h2>${up ? 'Créer un compte' : 'Connexion'}</h2>
     <label>Courriel</label><input name="email" type="email" required autocomplete="email">
     <label>Mot de passe</label><input name="password" type="password" minlength="6" required autocomplete="${up ? 'new-password' : 'current-password'}">
@@ -1114,7 +1127,7 @@ function renderAuth() {
   </form></div>`;
 }
 function renderOnboarding() {
-  root.innerHTML = `<div class="auth"><h2>Bienvenue 👋</h2><p class="muted">Quelques infos pour créer ton plan de départ. Tu pourras tout modifier ensuite.</p>${profileForm({}, 'Créer mon plan')}</div>`;
+  root.innerHTML = `<div class="auth">${brandHtml('Bienvenue 👋')}<h2>Créons ton plan</h2><p class="muted">Quelques infos pour créer ton plan de départ. Tu pourras tout modifier ensuite.</p>${profileForm({}, 'Créer mon plan')}</div>`;
 }
 async function hydratePhotos() {
   for (const img of document.querySelectorAll('img[data-path]')) {
