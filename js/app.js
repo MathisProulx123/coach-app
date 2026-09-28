@@ -4,7 +4,7 @@ import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, t
 import { parsePlates } from './plates.js';
 import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
-import { ALLERGENS, DIETS, externalFood } from './foods.js';
+import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
@@ -53,7 +53,7 @@ async function ensureMealPlan() {
   }
 }
 const prefs = () => ({
-  allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '',
+  allergies: [], other_allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '',
   load_units: {}, plate_lb: 45, bar_lb: 45, training_goal_text: '', training_goal_ai: '', training_style: 'hypertrophy',
   budget: 'normal',
   ...(S.profile?.food_prefs || {}),
@@ -559,7 +559,14 @@ function foodPrefsForm(pr, first) {
 function foodFields(pr) {
   return `
     <label>Allergies ou intolérances</label>
-    <div class="checks">${Object.entries(ALLERGENS).map(([k, v]) => `<label class="check"><input type="checkbox" name="allergy" value="${k}" ${pr.allergies.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+    <input type="search" data-allergy-search placeholder="Chercher une allergie (ex. kiwi, moutarde)…" autocomplete="off">
+    <div class="checks allergies" style="margin-top:8px">
+      ${Object.entries(ALLERGENS).map(([k, v]) => `<label class="check" data-name="${esc(norm(`${v} ${ALLERGEN_WORDS[k] || ''}`))}"><input type="checkbox" name="allergy" value="${k}" ${pr.allergies.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}
+      ${Object.entries(EXTRA_ALLERGIES).map(([k, v]) => `<label class="check extra" data-name="${esc(norm(`${v.label} ${v.terms.join(' ')}`))}" ${pr.other_allergies.includes(k) ? '' : 'hidden'}><input type="checkbox" name="allergy_other" value="${k}" ${pr.other_allergies.includes(k) ? 'checked' : ''}> ${esc(v.label)}</label>`).join('')}
+      ${pr.other_allergies.filter((a) => !EXTRA_ALLERGIES[a]).map((a) => `<label class="check extra" data-name="${esc(norm(a))}"><input type="checkbox" name="allergy_other" value="${esc(a)}" checked> ${esc(a)}</label>`).join('')}
+    </div>
+    <button type="button" class="ghost small" data-act="addAllergy" hidden style="margin-top:8px"></button>
+    <p class="muted">Une allergie hors liste écarte de tes repas les aliments dont le nom la contient. Vérifie toujours l’étiquette des produits.</p>
     <label>Régime</label>
     <select name="diet">${Object.entries(DIETS).map(([k, v]) => `<option value="${k}" ${pr.diet === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
     <label>Aliments que tu n’aimes pas ou veux éviter (séparés par des virgules)</label>
@@ -572,7 +579,7 @@ function foodFields(pr) {
     <p class="muted">Le coach IA en tient compte dans ses conseils (ex. privilégier le riz, les œufs, le poulet en gros format plutôt que des produits chers). Le choix précis des aliments selon leur prix n’est pas encore automatique.</p>`;
 }
 const readFoodFields = (fd) => ({
-  allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), budget: fd.get('budget') || 'normal',
+  allergies: fd.getAll('allergy'), other_allergies: [...new Set(fd.getAll('allergy_other').map((a) => String(a).trim().slice(0, 40)).filter(Boolean))].slice(0, 15), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), budget: fd.get('budget') || 'normal',
 });
 
 function vFood() {
@@ -906,7 +913,7 @@ function aiContext() {
     nutrition: {
       cibles_moyennes_semaine: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau },
       cycle_glucidique: { jour_entrainement: dayVariant(pl, 'train'), jour_repos: dayVariant(pl, 'rest'), note: 'Protéines et lipides identiques les deux types de jour ; seuls glucides et calories varient. La personne choisit le type de jour dans l’onglet Repas.' },
-      allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, budget_epicerie: BUDGETS[pr.budget],
+      allergies: pr.allergies, autres_allergies: pr.other_allergies.map(otherAllergyLabel), regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, budget_epicerie: BUDGETS[pr.budget],
       plan_de_repas_jour_entrainement: mealsFor('train'), plan_de_repas_jour_repos: mealsFor('rest'),
     },
     programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => defOf(e).name) })),
@@ -1189,7 +1196,7 @@ function onbRecapHtml(o) {
   };
   const pr = {
     ...prefs(), weight_unit: unit, goal_weight: d.goal_weight_kg ?? null, goal_date: d.goal_date || '', training_goal_text: d.training_goal_text || '',
-    training_style: d.training_style || 'hypertrophy', diet: d.diet || 'aucun', allergies: d.allergies || [], dislikes: d.dislikes || '',
+    training_style: d.training_style || 'hypertrophy', diet: d.diet || 'aucun', allergies: d.allergies || [], other_allergies: d.other_allergies || [], dislikes: d.dislikes || '',
     meals: d.meals || 4, budget: d.budget || 'normal',
   };
   const minor = d.birth_year && new Date().getFullYear() - d.birth_year < 18;
@@ -1205,6 +1212,30 @@ function onbRecapHtml(o) {
   ${profileForm(p, 'Créer mon plan', pr, { form: 'onboard', ai: false, extra: `<h2 style="margin-top:24px">Alimentation</h2>${foodFields(pr)}` })}
   <button type="button" class="ghost block" data-act="onbMode" data-arg="chat">Revenir à la discussion</button>`;
 }
+// Recherche d'allergie : filtre les cases, montre les allergies moins courantes qui correspondent, et propose
+// d'ajouter le terme tapé s'il ne correspond à aucune case.
+function filterAllergies(input) {
+  const q = norm(input.value.trim());
+  const box = input.form.querySelector('.checks.allergies');
+  let found = false;
+  box.querySelectorAll('.check').forEach((c) => {
+    const hit = !q || c.dataset.name.includes(q);
+    if (q && hit) found = true;
+    c.hidden = c.classList.contains('extra') ? !(c.querySelector('input').checked || (q && hit)) : !hit;
+  });
+  const add = input.form.querySelector('[data-act=addAllergy]');
+  add.hidden = q.length < 3 || found; // une case correspond déjà : pas de doublon
+  add.textContent = `+ Ajouter « ${input.value.trim()} » comme allergie`;
+}
+acts.addAllergy = (el) => {
+  const input = el.form.querySelector('[data-allergy-search]');
+  const term = input.value.trim().slice(0, 40);
+  if (!term) return;
+  el.form.querySelector('.checks.allergies').insertAdjacentHTML('beforeend',
+    `<label class="check extra" data-name="${esc(norm(term))}"><input type="checkbox" name="allergy_other" value="${esc(term)}" checked> ${esc(term)}</label>`);
+  input.value = '';
+  filterAllergies(input);
+};
 acts.onbMode = (el) => { S.onb.mode = el.dataset.arg; onbSave(); renderOnboarding(); window.scrollTo(0, 0); };
 acts.onbRestart = (el, e) => {
   e.preventDefault();
@@ -1512,6 +1543,12 @@ function bindEvents(el) {
   });
   el.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tap[data-act]')) { e.preventDefault(); e.target.click(); }
+    // Recherche d'allergie : Entrée ajoute le terme au lieu d'envoyer tout le formulaire
+    if (e.key === 'Enter' && e.target.dataset.allergySearch !== undefined) {
+      e.preventDefault();
+      const add = e.target.form.querySelector('[data-act=addAllergy]');
+      if (!add.hidden) add.click();
+    }
     // Discussion : Entrée envoie, Maj+Entrée va à la ligne
     if (e.key === 'Enter' && !e.shiftKey && e.target.matches('.chatform textarea')) { e.preventDefault(); e.target.form.requestSubmit(); }
   });
@@ -1537,6 +1574,7 @@ function bindEvents(el) {
       const q = norm(e.target.value.trim());
       e.target.closest('.panel').querySelectorAll('[data-name]').forEach((r) => { r.hidden = !!q && !r.dataset.name.includes(q); });
     }
+    if (e.target.dataset.allergySearch !== undefined) filterAllergies(e.target);
     // Champs qui réagissent en tapant (ex. recherche d'aliment)
     if (e.target.dataset.act && acts[e.target.dataset.act]) acts[e.target.dataset.act](e.target, e);
     // Séance en cours : garde ce qui est tapé même sans avoir appuyé sur « Terminer »

@@ -14,6 +14,31 @@ export const ALLERGENS = {
   arachide: 'Arachides', noix: 'Noix / fruits à coque', lait: 'Lait / lactose', oeuf: 'Œufs', gluten: 'Gluten (blé)',
   soya: 'Soya', poisson: 'Poisson', crustaces: 'Fruits de mer', sesame: 'Sésame',
 };
+// Autres mots qui mènent à une allergie de la liste dans la recherche (ex. « noisette » → Noix / fruits à coque).
+export const ALLERGEN_WORDS = {
+  arachide: 'cacahuete peanut beurre d arachide', noix: 'noisette amande cajou pistache pacane pecan macadamia',
+  lait: 'lactose laitier fromage yogourt yaourt creme beurre', oeuf: 'oeuf', gluten: 'ble farine seigle orge celiaque',
+  soya: 'soja tofu edamame', poisson: 'saumon thon morue truite sardine', crustaces: 'crevette homard crabe moule petoncle mollusque',
+  sesame: 'tahini',
+};
+
+// Allergies moins courantes, proposées par la recherche du formulaire. Elles écartent les aliments dont le nom (ou un
+// mot-clé) contient un des termes. N'importe quelle autre allergie tapée à la main marche pareil, avec son propre nom.
+export const EXTRA_ALLERGIES = {
+  moutarde: { label: 'Moutarde', terms: ['moutarde'] },
+  kiwi: { label: 'Kiwi', terms: ['kiwi'] },
+  fraise: { label: 'Fraises', terms: ['fraise'] },
+  banane: { label: 'Banane', terms: ['banane'] },
+  agrumes: { label: 'Agrumes (orange, citron…)', terms: ['orange', 'citron', 'pamplemousse', 'clementine', 'lime', 'agrume'] },
+  tomate: { label: 'Tomate', terms: ['tomate'] },
+  celeri: { label: 'Céleri', terms: ['celeri'] },
+  mais: { label: 'Maïs', terms: ['mais'] },
+  avoine: { label: 'Avoine', terms: ['avoine'] },
+  riz: { label: 'Riz', terms: ['riz'] },
+  legumineuses: { label: 'Légumineuses (lentilles, pois chiches…)', terms: ['lentille', 'pois chiche', 'haricot', 'feve', 'legumineuse'] },
+};
+export const otherAllergyLabel = (a) => EXTRA_ALLERGIES[a]?.label || a;
+
 export const DIETS = {
   aucun: 'Aucune restriction', vegetarien: 'Végétarien', vegetalien: 'Végétalien', pescetarien: 'Pescétarien', sans_porc: 'Sans porc (halal)',
 };
@@ -96,6 +121,12 @@ export function allowed(food, prefs = {}) {
   if (diet === 'sans_porc' && food.pork) return false;
   // « oeufs, saumon » -> on retire le « s » final pour reconnaître le pluriel
   const dislikes = String(prefs.dislikes || '').split(/[,;\n]/).map((s) => norm(s.trim()).replace(/s$/, '')).filter((s) => s.length >= 3);
+  // Autres allergies (recherche du formulaire) : même règle que les aliments non aimés, par nom et mots-clés.
+  // Une allergie tapée en plusieurs mots compte aussi chaque mot important (« fraises des bois » écarte les fraises) :
+  // pour une allergie, mieux vaut écarter trop d'aliments que pas assez.
+  const words = (s) => [s, ...(s.includes(' ') ? s.split(/\s+/).filter((w) => w.length >= 4) : [])];
+  const others = (prefs.other_allergies || []).flatMap((a) => EXTRA_ALLERGIES[a]?.terms || words(norm(a.trim())))
+    .map((s) => norm(s.trim()).replace(/s$/, '')).filter((s) => s.length >= 3);
   const hay = [norm(food.name), ...(food.kw || []).map(norm)];
-  return !dislikes.some((d) => hay.some((h) => h.includes(d)));
+  return ![...dislikes, ...others].some((d) => hay.some((h) => h.includes(d)));
 }

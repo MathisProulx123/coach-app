@@ -2,7 +2,7 @@
 // Ce fichier contient la logique (consignes pour l'IA, validation des réponses, faux coach du mode démo) ;
 // l'affichage est dans app.js. L'IA ne crée rien elle-même : elle remplit un BROUILLON que la personne vérifie
 // dans un récapitulatif avant que le profil et le plan soient créés.
-import { ALLERGENS, DIETS } from './foods.js';
+import { ALLERGENS, DIETS, EXTRA_ALLERGIES } from './foods.js';
 
 // Mêmes clés que TRAINING_STYLES et BUDGETS dans app.js.
 const STYLES = ['strength', 'hypertrophy', 'endurance'];
@@ -42,6 +42,7 @@ export function mergeDraft(prev, d = {}) {
     training_style: oneOf(d.training_style, STYLES),
     diet: oneOf(d.diet, Object.keys(DIETS)),
     allergies: Array.isArray(d.allergies) ? d.allergies.filter((a) => ALLERGENS[a]) : undefined,
+    other_allergies: Array.isArray(d.other_allergies) ? d.other_allergies.filter((a) => typeof a === 'string' && a.trim()).map((a) => a.trim().slice(0, 40)).slice(0, 15) : undefined,
     dislikes: str(d.dislikes, 300),
     meals: num(d.meals, 3, 6) && Math.round(d.meals),
     budget: oneOf(d.budget, BUDGET_KEYS),
@@ -70,6 +71,7 @@ Réponds UNIQUEMENT avec un objet JSON, sans texte autour : {"reply": "ta phrase
 - limitations (blessures, douleurs, exercices à éviter), training_goal_text (son but en ses mots, résumé en bon français)
 - training_style : "strength" (force), "hypertrophy" (muscle, par défaut) ou "endurance"
 - diet : ${Object.keys(DIETS).map((k) => `"${k}"`).join(', ')} ; allergies : liste parmi ${Object.keys(ALLERGENS).map((k) => `"${k}"`).join(', ')}
+- other_allergies : les autres allergies ou intolérances qui ne sont pas dans cette liste, en mots simples au singulier ; utilise si possible une de ces clés : ${Object.keys(EXTRA_ALLERGIES).map((k) => `"${k}"`).join(', ')} (ex. « allergique au kiwi » → "kiwi", « aux oranges » → "agrumes"), sinon le nom de l'aliment (ex. "mangue")
 - dislikes (aliments à éviter, séparés par des virgules), meals (3 à 6 repas par jour), budget ("serre", "normal" ou "genereux")
 - caution : une courte note SEULEMENT si la personne a moins de 18 ans, est enceinte, parle d'une maladie, d'une blessure sérieuse ou de signes de trouble alimentaire (restriction extrême, culpabilité, perte de poids très rapide). Dans ce cas, dis-lui aussi avec douceur, dans "reply", d'en parler à un professionnel de la santé.
 N'invente rien : laisse de côté une clé si tu ne sais pas.
