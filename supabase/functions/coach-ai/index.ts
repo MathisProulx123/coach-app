@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
     });
 
     let text: string | undefined;
-    let lastError = 'Réponse vide';
+    const errors: string[] = []; // l'erreur de CHAQUE modèle, pour savoir si c'est une surcharge, la clé ou un nom de modèle
     outer:
     for (const model of MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -140,13 +140,14 @@ Deno.serve(async (req) => {
         const parts = j?.candidates?.[0]?.content?.parts ?? [];
         text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim();
         if (text) break outer;
-        lastError = j?.error?.message ?? `Erreur ${r.status}`;
+        const err = `${model} [${r.status}] ${String(j?.error?.message ?? 'réponse vide').slice(0, 160)}`;
         // Surcharge ou limite momentanée : on réessaie. Autre erreur (modèle inconnu, requête refusée) : modèle suivant.
-        if (!(r.status === 429 || r.status >= 500)) break;
+        if (!(r.status === 429 || r.status >= 500)) { errors.push(err); break; }
+        if (attempt === 1) errors.push(err);
         await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
       }
     }
-    if (!text) throw new Error(lastError);
+    if (!text) throw new Error(errors.join(' | ') || 'Réponse vide');
     return json({ text });
   } catch (e) {
     return json({ error: String((e as Error).message ?? e) }, 500);
