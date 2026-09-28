@@ -165,7 +165,9 @@ export async function askCoach(payload) {
   if (DEMO) {
     return 'Mode démo : l’avis IA est désactivé. Une fois Supabase branché et la fonction coach-ai déployée, ton coach IA commentera ici ta semaine en quelques phrases.';
   }
-  const { data, error } = await sb.functions.invoke(CONFIG.AI_FUNCTION, { body: payload });
+  // Google peut être très lent quand il est surchargé : au-delà de 90 s, on arrête d'attendre plutôt que de laisser « … » affiché.
+  const timeout = new Promise((_, no) => setTimeout(() => no(new Error('Le coach IA met trop de temps à répondre (Google est surchargé). Réessaie dans quelques minutes.')), 90000));
+  const { data, error } = await Promise.race([sb.functions.invoke(CONFIG.AI_FUNCTION, { body: payload }), timeout]);
   if (error) throw await edgeError(error);
   if (!data?.text) throw new Error(data?.error || 'Réponse vide du coach IA');
   return data.text;

@@ -142,7 +142,8 @@ Deno.serve(async (req) => {
         if (text) break outer;
         const err = `${model} [${r.status}] ${String(j?.error?.message ?? 'réponse vide').slice(0, 160)}`;
         // Surcharge ou limite momentanée : on réessaie. Autre erreur (modèle inconnu, requête refusée) : modèle suivant.
-        if (!(r.status === 429 || r.status >= 500)) { errors.push(err); break; }
+        // Quota gratuit épuisé : réessayer ce modèle ne sert à rien (et consomme encore), on passe au suivant.
+        if (!(r.status === 429 || r.status >= 500) || /quota/i.test(err)) { errors.push(err); break; }
         if (attempt === 1) errors.push(err);
         await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
       }
