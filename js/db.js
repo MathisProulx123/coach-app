@@ -75,14 +75,38 @@ export async function getUser() {
   const u = data.session?.user;
   return u ? { id: u.id, email: u.email } : null;
 }
+// Les liens envoyés par courriel ramènent à l'app, avec un repère dans l'adresse (?confirme ou ?nouveau-mdp).
+const appUrl = (flag) => `${location.origin}${location.pathname}?${flag}`;
+// Messages de Supabase (en anglais) traduits pour la personne.
+const AUTH_FR = [
+  [/invalid login credentials/i, 'Courriel ou mot de passe incorrect.'],
+  [/email not confirmed/i, 'Confirme d’abord ton courriel : clique sur le lien qu’on t’a envoyé.'],
+  [/user already registered|already been registered/i, 'Un compte existe déjà avec ce courriel. Connecte-toi, ou utilise « Mot de passe oublié ».'],
+  [/password should be at least|password is too short/i, 'Le mot de passe doit avoir au moins 6 caractères.'],
+  [/signups? not allowed|signup is disabled/i, 'Les inscriptions sont fermées pour le moment.'],
+  [/rate limit|too many requests|security purposes/i, 'Trop d’essais d’affilée. Attends une minute puis réessaie.'],
+  [/unable to validate email|invalid email|email address .* is invalid/i, 'Cette adresse courriel n’est pas valide.'],
+  [/same.*password|different from the old/i, 'Choisis un mot de passe différent de l’ancien.'],
+];
+const authError = (e) => new Error((AUTH_FR.find(([re]) => re.test(e.message)) || [null, e.message])[1]);
+
+// Renvoie true si un courriel de confirmation a été envoyé (compte à activer avant de se connecter).
 export async function signUp(email, password) {
-  const { data, error } = await sb.auth.signUp({ email, password });
-  if (error) throw error;
-  if (!data.session) throw new Error('Compte créé. Confirme ton courriel (ou désactive la confirmation dans Supabase), puis connecte-toi.');
+  const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: appUrl('confirme') } });
+  if (error) throw authError(error);
+  return !data.session;
+}
+export async function resetPassword(email) {
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: appUrl('nouveau-mdp') });
+  if (error) throw authError(error);
+}
+export async function updatePassword(password) {
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) throw authError(error);
 }
 export async function signIn(email, password) {
   const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  if (error) throw authError(error);
 }
 export async function signOut() {
   if (!DEMO) await sb.auth.signOut();

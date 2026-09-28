@@ -1316,7 +1316,7 @@ const brandHtml = (sub) => `<div class="brand"><div class="logo">${icon('pulse')
 
 // ================= Rendu =================
 function render() {
-  if (!S.me) return renderAuth();
+  if (!S.me || S.recovery) return renderAuth(); // S.recovery : arrivé par le lien « mot de passe oublié »
   if (!S.profile) return renderOnboarding();
   root.innerHTML = `${db.DEMO ? '<div class="demo">Mode démo : les données restent sur cet appareil</div>' : ''}
     <header><h1>${TITLES[S.view]}</h1><a href="#/settings" aria-label="Réglages">${icon('gear')}</a></header>
@@ -1324,16 +1324,55 @@ function render() {
     <nav>${TABS.map(([k, i, t]) => `<a href="#/${k}" class="${S.view === k || (k === 'train' && S.view === 'edit') ? 'on' : ''}"><span class="ico">${icon(i)}</span>${t}</a>`).join('')}</nav>`;
   hydratePhotos();
 }
+// Écrans de connexion : in (connexion), up (inscription), sent (courriel de confirmation envoyé),
+// forgot (mot de passe oublié), resetSent (lien envoyé), newpw (choisir un nouveau mot de passe, via le lien reçu).
 function renderAuth() {
-  const up = S.authMode === 'up';
-  root.innerHTML = `<div class="auth">${brandHtml('Ton entraînement, tes repas et ton suivi, ajustés chaque semaine.')}<form data-form="auth" class="card">
+  const m = S.authMode, email = esc(S.authEmail || '');
+  const back = '<p class="center"><a href="#" data-act="authMode" data-arg="in">Retour à la connexion</a></p>';
+  const card = {
+    sent: `<div class="card"><h2>Vérifie tes courriels 📬</h2>
+      <p>On t’a envoyé un lien à <b>${email}</b>. Clique dessus pour activer ton compte : tu reviendras ici, connecté.</p>
+      <p class="muted">Rien reçu après quelques minutes ? Regarde dans les courriels indésirables.</p>${back}</div>`,
+    resetSent: `<div class="card"><h2>Lien envoyé 📬</h2>
+      <p>Si un compte existe pour <b>${email}</b>, tu vas recevoir un lien pour choisir un nouveau mot de passe.</p>
+      <p class="muted">Rien reçu après quelques minutes ? Regarde dans les courriels indésirables.</p>${back}</div>`,
+    forgot: `<form data-form="forgot" class="card"><h2>Mot de passe oublié</h2>
+      <p class="muted">Entre ton courriel : on t’envoie un lien pour en choisir un nouveau.</p>
+      <label>Courriel</label><input name="email" type="email" required autocomplete="email" value="${email}">
+      <button class="block" style="margin-top:14px">Envoyer le lien</button>${back}</form>`,
+    newpw: `<form data-form="newPassword" class="card"><h2>Nouveau mot de passe</h2>
+      <label>Nouveau mot de passe</label><input name="password" type="password" minlength="6" required autocomplete="new-password">
+      <label>Encore une fois</label><input name="password2" type="password" minlength="6" required autocomplete="new-password">
+      <button class="block" style="margin-top:14px">Enregistrer</button></form>`,
+  }[m];
+  const up = m === 'up';
+  root.innerHTML = `<div class="auth">${brandHtml('Ton entraînement, tes repas et ton suivi, ajustés chaque semaine.')}${card || `<form data-form="auth" class="card">
     <h2>${up ? 'Créer un compte' : 'Connexion'}</h2>
-    <label>Courriel</label><input name="email" type="email" required autocomplete="email">
+    <label>Courriel</label><input name="email" type="email" required autocomplete="email" value="${email}">
     <label>Mot de passe</label><input name="password" type="password" minlength="6" required autocomplete="${up ? 'new-password' : 'current-password'}">
+    ${up ? '<p class="muted">Au moins 6 caractères.</p>' : '<p class="right"><a href="#" data-act="authMode" data-arg="forgot">Mot de passe oublié ?</a></p>'}
     <button class="block" style="margin-top:14px">${up ? 'Créer mon compte' : 'Me connecter'}</button>
     <p class="center"><a href="#" data-act="toggleAuth">${up ? 'J’ai déjà un compte' : 'Créer un compte'}</a></p>
-  </form></div>`;
+  </form>`}</div>`;
 }
+acts.authMode = (el, e) => { e.preventDefault(); S.authMode = el.dataset.arg; renderAuth(); };
+forms.forgot = async (form) => {
+  const email = String(new FormData(form).get('email')).trim();
+  const btn = form.querySelector('button'); btn.disabled = true;
+  try { await db.resetPassword(email); S.authEmail = email; S.authMode = 'resetSent'; renderAuth(); }
+  catch (e) { toast(e.message); btn.disabled = false; }
+};
+forms.newPassword = async (form) => {
+  const fd = new FormData(form);
+  if (fd.get('password') !== fd.get('password2')) return toast('Les deux mots de passe ne sont pas pareils.');
+  try {
+    await db.updatePassword(String(fd.get('password')));
+    S.recovery = false; S.authMode = 'in';
+    toast('Mot de passe changé ✅');
+    S.me = await db.getUser();
+    await refresh('home');
+  } catch (e) { toast(e.message); }
+};
 // ----- Premier accès : conversation avec le coach (ou formulaire classique) -----
 // La conversation et le brouillon sont gardés sur l'appareil, pour reprendre là où on en était après un rechargement.
 const onbKey = () => `coach_onb_${S.me.id}`;
@@ -1568,9 +1607,11 @@ acts.aiFillDiet = async (el) => {
 // ================= Formulaires =================
 forms.auth = async (form) => {
   const fd = new FormData(form);
+  S.authEmail = String(fd.get('email')).trim();
   try {
-    if (S.authMode === 'up') await db.signUp(fd.get('email'), fd.get('password'));
-    else await db.signIn(fd.get('email'), fd.get('password'));
+    if (S.authMode === 'up') {
+      if (await db.signUp(S.authEmail, fd.get('password'))) { S.authMode = 'sent'; return renderAuth(); } // courriel à confirmer
+    } else await db.signIn(S.authEmail, fd.get('password'));
     S.me = await db.getUser();
     await refresh('home');
   } catch (e) { toast(e.message); }
@@ -1778,8 +1819,17 @@ document.addEventListener('error', (e) => {
 // ================= Démarrage =================
 (async function boot() {
   try {
+    // Arrivée par un lien reçu par courriel : ?nouveau-mdp (mot de passe oublié) ou ?confirme (inscription)
+    const q = new URLSearchParams(location.search);
+    if (q.has('nouveau-mdp')) { S.recovery = true; S.authMode = 'newpw'; }
     await db.init();
-    S.me = await db.getUser();
+    S.me = await db.getUser(); // attend que Supabase ait lu le jeton du lien (dans l'adresse)
+    if (q.has('confirme') && S.me) toast('Courriel confirmé, bienvenue ! 🎉');
+    if (q.has('nouveau-mdp') && !S.me) { S.recovery = false; S.authMode = 'forgot'; toast('Ce lien a expiré : demande-en un nouveau.'); }
+    if (q.has('nouveau-mdp') || q.has('confirme')) { // on retire nos repères de l'adresse
+      q.delete('nouveau-mdp'); q.delete('confirme');
+      history.replaceState(null, '', `${location.pathname}${q.toString() ? `?${q}` : ''}${location.hash.includes('access_token') ? '' : location.hash}`);
+    }
     if (S.me) { await loadMine(); if (S.profile) await loadOthers(); }
   } catch (e) {
     console.error(e);

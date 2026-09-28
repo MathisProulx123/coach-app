@@ -32,12 +32,16 @@ La clé « anon » est faite pour être publique. La sécurité vient des règle
 3. **Settings → Pages → Deploy from a branch → main / (root) → Save**.
 4. Après 1–2 minutes, ton adresse est `https://TON-NOM.github.io/NOM-DU-DEPOT/`.
 
-## 3. Créer vos comptes, puis fermer les inscriptions
+## 3. Les inscriptions
 
-1. Ouvre l'adresse sur ton téléphone → **Créer un compte** (courriel + mot de passe) → remplis ton profil.
-2. Ton ami fait pareil.
-3. Dans Supabase : **Authentication → Sign In / Providers → désactive « Allow new users to sign up »**.
-   Ainsi, personne d'autre ne peut créer de compte, même s'il connaît l'adresse.
+**Usage privé (à deux)** : créez vos comptes, puis **Authentication → Sign In / Providers → désactivez « Allow new users to sign up »**.
+
+**Produit ouvert au public** (d'abord `migration_004.sql` à `migration_006.sql`, voir plus bas) :
+1. **Authentication → Sign In / Providers → Email** : laisse « Allow new users to sign up » et active **Confirm email**.
+2. **Authentication → URL Configuration** : **Site URL** = l'adresse de l'app (ex. `https://TON-NOM.github.io/NOM-DU-DEPOT/`) ; dans **Redirect URLs**, ajoute la même adresse suivie de `**`. Les liens des courriels (confirmation, mot de passe oublié) ramènent à cette adresse.
+3. **Courriels** : l'envoi intégré de Supabase est limité à quelques courriels par heure et, sur un nouveau projet, seulement aux adresses de ton équipe Supabase. Pour de vrais clients, branche un service d'envoi (**Authentication → Emails → SMTP Settings**, ex. Resend ou Brevo, qui ont une offre gratuite).
+
+Dans l'app : inscription avec confirmation par courriel, « Mot de passe oublié ? » sur l'écran de connexion, et **Réglages → Mes données** pour télécharger ses données ou supprimer son compte (Loi 25).
 
 ## 4. Installer sur l'écran d'accueil
 
@@ -59,7 +63,7 @@ Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec
 
 ## Mise à jour de la base (migration)
 
-Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql`, `migration_003.sql`), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).
+Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql` à `migration_006.sql`, dans l'ordre), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).
 
 ## Comptes privés et amis (migration_004)
 
