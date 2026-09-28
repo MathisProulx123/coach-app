@@ -17,7 +17,7 @@ const TYPE_NAMES = {
 };
 
 // Mode d'emploi donné à l'IA (dans le contexte du chat seulement).
-export const ACTIONS_DOC = `Tu peux faire des changements dans l'application : décris-les en mots dans ta réponse, puis termine par un bloc de code « actions » contenant une liste JSON, par exemple :
+export const ACTIONS_DOC = `IMPORTANT : tu peux maintenant faire toi-même des changements dans l'application. Quand la personne demande un changement de la liste ci-dessous (ou accepte ta suggestion), ne lui explique PAS où toucher : fais la proposition toi-même. Décris-la en une phrase dans ta réponse, puis termine par un bloc de code « actions » contenant une liste JSON, par exemple :
 \`\`\`actions
 [{"type": "swap_exercise", "from": "squat", "to": "legpress"}]
 \`\`\`

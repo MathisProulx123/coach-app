@@ -1056,7 +1056,10 @@ async function ask(q, photos = []) {
   if (!canAI()) {
     text = faq(q) ?? FAQ_DEFAULT;
   } else {
-    const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: chatText(m) })), context: chatContext(), photos };
+    const messages = hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: chatText(m) }));
+    // Rappel invisible pour la personne : sans lui, le coach retombe dans ses anciennes consignes (« va dans l'onglet… »).
+    messages[messages.length - 1].text += '\n\n(Rappel pour le coach : si je demande un changement faisable avec actions_possibles, propose-le toi-même avec le bloc ```actions```, au lieu de m’expliquer où toucher.)';
+    const payload = { messages, context: chatContext(), photos };
     const quota = (e) => /exceeded your current quota/i.test(e.message); // quota gratuit Gemini du jour épuisé
     const limited = (e) => quota(e) || /limite quotidienne/i.test(e.message); // inutile de réessayer
     const transient = (e) => !limited(e) && /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
@@ -1067,6 +1070,16 @@ async function ask(q, photos = []) {
         if (!transient(e)) throw e;
         await new Promise((r) => setTimeout(r, 3000)); // Google est parfois surchargé : on réessaie une fois
         text = await db.askCoach(payload);
+      }
+      // Toutes ses propositions sont refusées par l'app (ex. exercice déjà dans la séance) : on lui renvoie les raisons
+      // une fois, pour qu'il propose autre chose plutôt que de laisser la personne devant « Impossible ».
+      const first = splitActions(text);
+      const check = first.actions.length && planActions(first.actions, actionState());
+      if (check && !check.valid) {
+        const why = check.items.map((i) => i.label).join(' ; ');
+        try {
+          text = await db.askCoach({ ...payload, photos: [], messages: [...messages, { role: 'model', text }, { role: 'user', text: `(Message de l'application, pas de la personne : ta proposition a été refusée — ${why}. Propose une autre option valide, en te basant sur programme_detaille et exercices_disponibles, avec un nouveau bloc actions. Ne mentionne pas ce refus.)` }] });
+        } catch { /* on garde la première réponse, la carte expliquera pourquoi c'est impossible */ }
       }
     } catch (e) {
       const help = faq(q);
