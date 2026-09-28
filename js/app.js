@@ -283,10 +283,15 @@ function vTrain() {
           <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${loadTxt(t.w, ex.id)}` : ''}</div></div>
         </div>
         <div class="muted">${esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${loadUnitFor(ex.id) === 'kg' ? round1(s.w || 0) : round1(kgToLb(s.w || 0))}${loadUnitFor(ex.id) === 'kg' ? '' : ' lb'}×${s.r}`).join(', ')}.` : ''}</div>
-        <div class="sets">${Array.from({ length: t.sets }, (_, s) => { const a = loadInputAttrs(t.w, ex.id); return `
+        <div class="sets">${Array.from({ length: t.sets }, (_, s) => {
+          const a = loadInputAttrs(t.w, ex.id);
+          const dr = draftLoad()[ex.id]?.[s];
+          const wVal = dr?.w !== undefined ? dr.w : a.value;
+          const rVal = dr?.r !== undefined ? dr.r : '';
+          return `
           <span class="muted">${s + 1}</span>
-          <input name="w_${i}_${s}" type="${a.type}" ${a.type === 'number' ? 'inputmode="decimal" step="0.5"' : ''} min="0" placeholder="${a.placeholder}" value="${a.value}" aria-label="Charge série ${s + 1}">
-          <input name="r_${i}_${s}" type="number" inputmode="numeric" min="0" placeholder="${unit}" aria-label="Répétitions série ${s + 1}">`; }).join('')}
+          <input name="w_${i}_${s}" data-exid="${ex.id}" type="${a.type}" ${a.type === 'number' ? 'inputmode="decimal" step="0.5"' : ''} min="0" placeholder="${a.placeholder}" value="${esc(wVal)}" aria-label="Charge série ${s + 1}">
+          <input name="r_${i}_${s}" data-exid="${ex.id}" type="number" inputmode="numeric" min="0" placeholder="${unit}" value="${esc(rVal)}" aria-label="Répétitions série ${s + 1}">`; }).join('')}
         </div></div>`;
     }).join('')}
     <button class="block" style="margin-top:12px">Terminer la séance</button>
@@ -339,8 +344,12 @@ function exInfoHtml(id) {
 }
 acts.exInfo = (el) => openSheet(exInfoHtml(el.dataset.arg));
 acts.setExUnit = async (el) => {
-  try { await setExUnit(el.dataset.arg, el.dataset.unit); render(); openSheet(exInfoHtml(el.dataset.arg)); }
-  catch (e) { toast(e.message); }
+  try {
+    await setExUnit(el.dataset.arg, el.dataset.unit);
+    draftClearWeights(el.dataset.arg); // le poids tapé n'a plus le même sens dans la nouvelle unité ; les reps restent
+    render();
+    openSheet(exInfoHtml(el.dataset.arg));
+  } catch (e) { toast(e.message); }
 };
 function exclusionFor(id) {
   return S.plan.program.filter((d) => d.exercises.some((e) => e.id === id)).flatMap((d) => d.exercises.map((e) => e.id));
@@ -801,6 +810,28 @@ const chatKey = () => `coach_chat_${S.me.id}`;
 function chatLoad() { try { return JSON.parse(localStorage.getItem(chatKey()) || '[]'); } catch { return []; } }
 function chatSave(h) { try { localStorage.setItem(chatKey(), JSON.stringify(h.slice(-40))); } catch { /* stockage indisponible */ } }
 
+// ----- Brouillon de séance : ce que tu tapes est gardé même sans avoir appuyé sur « Terminer »,
+// même si tu changes d'onglet ou fermes l'app. Un seul brouillon par exercice (peu importe le jour affiché).
+const draftKey = () => `coach_wdraft_${S.me.id}`;
+function draftLoad() { try { return JSON.parse(localStorage.getItem(draftKey()) || '{}'); } catch { return {}; } }
+function draftSet(exId, setIdx, field, value) {
+  const d = draftLoad();
+  d[exId] = d[exId] || [];
+  d[exId][setIdx] = { ...d[exId][setIdx], [field]: value };
+  try { localStorage.setItem(draftKey(), JSON.stringify(d)); } catch { /* stockage indisponible */ }
+}
+function draftClear(exId) {
+  const d = draftLoad();
+  delete d[exId];
+  try { localStorage.setItem(draftKey(), JSON.stringify(d)); } catch { /* stockage indisponible */ }
+}
+// Change d'unité : seul le poids tapé n'a plus le même sens, les répétitions restent valides.
+function draftClearWeights(exId) {
+  const d = draftLoad();
+  if (d[exId]) d[exId] = d[exId].map((s) => (s ? { r: s.r } : s));
+  try { localStorage.setItem(draftKey(), JSON.stringify(d)); } catch { /* stockage indisponible */ }
+}
+
 const CHIPS = [
   'Comment remplacer un exercice que je ne peux pas faire ?',
   'Comment changer un aliment de mon plan ?',
@@ -1174,6 +1205,7 @@ forms.workout = async (form) => {
   if (!exercises.length) return toast('Note au moins une série avant de terminer.');
   try {
     await db.saveWorkout({ user_id: S.me.id, date: today(), day_label: day.label, exercises });
+    day.exercises.forEach((ex) => draftClear(ex.id));
     toast('Séance enregistrée 💪');
     S.dayIdx = null;
     await refresh('home');
@@ -1250,6 +1282,9 @@ function bindEvents(el) {
     }
     // Champs qui réagissent en tapant (ex. recherche d'aliment)
     if (e.target.dataset.act && acts[e.target.dataset.act]) acts[e.target.dataset.act](e.target, e);
+    // Séance en cours : garde ce qui est tapé même sans avoir appuyé sur « Terminer »
+    const m = e.target.dataset.exid && e.target.name?.match(/^([wr])_\d+_(\d+)$/);
+    if (m) draftSet(e.target.dataset.exid, +m[2], m[1], e.target.value);
   });
 }
 bindEvents(root);
