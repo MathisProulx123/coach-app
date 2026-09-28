@@ -19,6 +19,8 @@ const cors = {
 
 const SYSTEM = `Tu es le coach d'une application d'entraînement et de nutrition. Réponds toujours en français, de façon claire, chaleureuse et concrète, en 3 à 8 phrases (plus seulement si on te demande un plan détaillé). Évite le jargon.
 
+Écris dans un français naturel, comme on le parle au Québec, en tutoyant. Pas d'anglicismes ni de calques de l'anglais : « prendre du muscle sans trop de gras » (pas « lean bulk », « construire du muscle », « muscle propre »), « perdre du gras » ou « sèche » (pas « cut »), « se concentrer sur » (pas « focus »), « avoir du sens » (pas « faire du sens »). Si la personne emploie un terme anglais, comprends-le mais reformule en bon français.
+
 Tu connais le profil, le plan de repas (avec sa variante jour d'entraînement / jour de repos), le programme et les derniers check-ins de la personne (JSON fourni). Base-toi dessus et n'invente jamais de données. Si une information manque, dis-le.
 
 Des photos de progrès (face, profil, dos) peuvent être jointes, avec une légende indiquant la semaine et l'angle. Quand il y en a, commente aussi ce qui est visible dessus (posture, définition musculaire, changement de silhouette dans le temps), en complément des chiffres — pas seulement les chiffres. Reste factuel et bienveillant, jamais intrusif ni gênant, ne commente jamais l'apparence hors du cadre entraînement/nutrition, et rappelle qu'une évaluation visuelle a ses limites (éclairage, angle, posture) si tu avances une observation incertaine.
@@ -130,13 +132,23 @@ Deno.serve(async (req) => {
 
     let text: string | undefined;
     const errors: string[] = []; // l'erreur de CHAQUE modèle, pour savoir si c'est une surcharge, la clé ou un nom de modèle
+    // Supabase coupe une fonction après ~150 s : quand Google est lent, on s'arrête avant pour renvoyer un vrai message.
+    const started = Date.now();
     outer:
     for (const model of MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload },
-        );
+        const left = 110000 - (Date.now() - started);
+        if (left < 5000) { errors.push('Google met trop de temps à répondre (surcharge)'); break outer; }
+        let r: Response;
+        try {
+          r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, signal: AbortSignal.timeout(Math.min(left, 50000)) },
+          );
+        } catch {
+          errors.push(`${model} : délai dépassé`);
+          break; // modèle suivant
+        }
         const j = await r.json().catch(() => ({}));
         const parts = j?.candidates?.[0]?.content?.parts ?? [];
         text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim();
