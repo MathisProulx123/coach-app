@@ -47,42 +47,42 @@ const F = (id, name, role, slots, k, p, c, f, extra = {}) => ({ id, name, role, 
 
 export const FOODS = [
   // ---------- Protéines ----------
-  F('poulet', 'Poitrine de poulet cuite', 'protein', ['din', 'sou'], 165, 31, 0, 3.6, { max: 300, animal: 'meat', kw: ['poulet', 'volaille'], brands: 'n’importe quelle marque (ex. Flamingo, Maple Leaf, Kirkland)' }),
-  F('dinde', 'Poitrine de dinde cuite', 'protein', ['din', 'sou'], 135, 30, 0, 1, { max: 300, animal: 'meat', kw: ['dinde', 'volaille'], brands: 'n’importe quelle marque (ex. Butterball, Maple Leaf)' }),
-  F('boeuf', 'Bœuf haché extra-maigre cuit', 'protein', ['din', 'sou'], 205, 27, 0, 10, { max: 250, animal: 'meat', kw: ['boeuf', 'viande'], brands: 'extra-maigre, 5 % de gras (ex. Kirkland, marque de l’épicerie)' }),
-  F('porc', 'Filet de porc cuit', 'protein', ['din', 'sou'], 143, 26, 0, 3.5, { max: 300, animal: 'meat', pork: true, kw: ['porc', 'viande'], brands: 'filet ou longe, n’importe quelle marque' }),
-  F('saumon', 'Saumon cuit', 'protein', ['din', 'sou'], 206, 22, 0, 12, { max: 250, animal: 'fish', allergens: ['poisson'], kw: ['saumon', 'poisson'], brands: 'frais ou surgelé (ex. Kirkland, Irresistibles)' }),
-  F('morue', 'Poisson blanc cuit (morue, tilapia)', 'protein', ['din', 'sou'], 105, 23, 0, 0.9, { max: 350, animal: 'fish', allergens: ['poisson'], kw: ['morue', 'tilapia', 'poisson'], brands: 'frais ou surgelé, n’importe quelle marque' }),
-  F('thon', 'Thon en conserve (eau, égoutté)', 'protein', ['din', 'sou'], 116, 26, 0, 1, { max: 200, animal: 'fish', allergens: ['poisson'], kw: ['thon', 'poisson'], brands: 'Clover Leaf, Bumble Bee, Kirkland' }),
-  F('crevettes', 'Crevettes cuites', 'protein', ['din', 'sou'], 99, 24, 0.2, 0.3, { max: 250, animal: 'fish', allergens: ['crustaces'], kw: ['crevette', 'fruits de mer'], brands: 'surgelées décortiquées (ex. Kirkland, Irresistibles)' }),
-  F('oeufs', 'Œufs entiers', 'protein', ['dej', 'din', 'sou'], 143, 12.6, 0.7, 9.5, { max: 250, animal: 'egg', allergens: ['oeuf'], unit: { n: 'œuf', p: 'œufs', g: 50, whole: true }, kw: ['oeuf'], brands: 'Burnbrae Farms, Nutri, œufs de catégorie A' }),
-  F('yogourt', 'Yogourt grec nature 0 %', 'protein', ['dej', 'col'], 59, 10, 3.6, 0.4, { max: 400, animal: 'dairy', allergens: ['lait'], kw: ['yogourt', 'yaourt', 'yogurt'], brands: 'Oikos, Iögo, Liberté, Astro' }),
-  F('whey', 'Poudre de protéines (whey)', 'protein', ['dej', 'col'], 400, 80, 10, 5, { max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
-  F('vegprot', 'Poudre de protéines végétales (pois/riz)', 'protein', ['dej', 'col'], 380, 75, 8, 6, { max: 60, supplement: true, unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['poudre', 'proteine', 'vegetale'], brands: 'Vega Sport, Sunwarrior, Garden of Life' }),
-  F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
-  F('lentilles', 'Lentilles cuites', 'protein', ['din', 'sou'], 116, 9, 20, 0.4, { max: 200, kw: ['lentille', 'legumineuse'], brands: 'en conserve (ex. Unico, Kirkland) ou sèches' }),
-  F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 127, 8.7, 22.8, 0.5, { max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve (ex. Unico, Kirkland, Irresistibles)' }),
+  F('poulet', 'Poitrine de poulet cuite', 'protein', ['din', 'sou'], 165, 31, 0, 3.6, { min: 100, max: 300, animal: 'meat', kw: ['poulet', 'volaille'], brands: 'n’importe quelle marque (ex. Flamingo, Maple Leaf, Kirkland)' }),
+  F('dinde', 'Poitrine de dinde cuite', 'protein', ['din', 'sou'], 135, 30, 0, 1, { min: 100, max: 300, animal: 'meat', kw: ['dinde', 'volaille'], brands: 'n’importe quelle marque (ex. Butterball, Maple Leaf)' }),
+  F('boeuf', 'Bœuf haché extra-maigre cuit', 'protein', ['din', 'sou'], 205, 27, 0, 10, { min: 100, max: 250, animal: 'meat', kw: ['boeuf', 'viande'], brands: 'extra-maigre, 5 % de gras (ex. Kirkland, marque de l’épicerie)' }),
+  F('porc', 'Filet de porc cuit', 'protein', ['din', 'sou'], 143, 26, 0, 3.5, { min: 100, max: 300, animal: 'meat', pork: true, kw: ['porc', 'viande'], brands: 'filet ou longe, n’importe quelle marque' }),
+  F('saumon', 'Saumon cuit', 'protein', ['din', 'sou'], 206, 22, 0, 12, { min: 100, max: 250, animal: 'fish', allergens: ['poisson'], kw: ['saumon', 'poisson'], brands: 'frais ou surgelé (ex. Kirkland, Irresistibles)' }),
+  F('morue', 'Poisson blanc cuit (morue, tilapia)', 'protein', ['din', 'sou'], 105, 23, 0, 0.9, { min: 100, max: 350, animal: 'fish', allergens: ['poisson'], kw: ['morue', 'tilapia', 'poisson'], brands: 'frais ou surgelé, n’importe quelle marque' }),
+  F('thon', 'Thon en conserve (eau, égoutté)', 'protein', ['din', 'sou'], 116, 26, 0, 1, { min: 85, max: 200, animal: 'fish', allergens: ['poisson'], kw: ['thon', 'poisson'], brands: 'Clover Leaf, Bumble Bee, Kirkland' }),
+  F('crevettes', 'Crevettes cuites', 'protein', ['din', 'sou'], 99, 24, 0.2, 0.3, { min: 100, max: 250, animal: 'fish', allergens: ['crustaces'], kw: ['crevette', 'fruits de mer'], brands: 'surgelées décortiquées (ex. Kirkland, Irresistibles)' }),
+  F('oeufs', 'Œufs entiers', 'protein', ['dej', 'din', 'sou'], 143, 12.6, 0.7, 9.5, { min: 100, max: 250, animal: 'egg', allergens: ['oeuf'], unit: { n: 'œuf', p: 'œufs', g: 50, whole: true }, kw: ['oeuf'], brands: 'Burnbrae Farms, Nutri, œufs de catégorie A' }),
+  F('yogourt', 'Yogourt grec nature 0 %', 'protein', ['dej', 'col'], 59, 10, 3.6, 0.4, { min: 150, max: 400, animal: 'dairy', allergens: ['lait'], kw: ['yogourt', 'yaourt', 'yogurt'], brands: 'Oikos, Iögo, Liberté, Astro' }),
+  F('whey', 'Poudre de protéines (whey)', 'protein', ['dej', 'col'], 400, 80, 10, 5, { min: 30, max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
+  F('vegprot', 'Poudre de protéines végétales (pois/riz)', 'protein', ['dej', 'col'], 380, 75, 8, 6, { min: 30, max: 60, supplement: true, unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['poudre', 'proteine', 'vegetale'], brands: 'Vega Sport, Sunwarrior, Garden of Life' }),
+  F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { min: 100, max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
+  F('lentilles', 'Lentilles cuites', 'protein', ['din', 'sou'], 116, 9, 20, 0.4, { min: 120, max: 200, kw: ['lentille', 'legumineuse'], brands: 'en conserve (ex. Unico, Kirkland) ou sèches' }),
+  F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 127, 8.7, 22.8, 0.5, { min: 120, max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve (ex. Unico, Kirkland, Irresistibles)' }),
 
   // ---------- Glucides ----------
   // Plafonds relevés pour rester précis même sur de grosses cibles (ex. prise de masse à 3500-4000+ kcal).
-  F('avoine', 'Flocons d’avoine (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { max: 160, allergens: ['gluten'], kw: ['avoine', 'gruau'], brands: 'Quaker, Nature’s Path' }),
-  F('avoine_sg', 'Flocons d’avoine sans gluten (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { max: 120, kw: ['avoine', 'gruau'], brands: 'Bob’s Red Mill (certifiés sans gluten), Nature’s Path' }),
-  F('pain', 'Pain de blé entier', 'carb', ['dej'], 247, 13, 41, 3.4, { max: 105, allergens: ['gluten'], unit: { n: 'tranche', p: 'tranches', g: 35, whole: true }, kw: ['pain', 'ble'], brands: 'Dempster’s, Bon Matin, Kirkland' }),
-  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28, 0.3, { max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 123, 2.7, 26, 1, { max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 31, 0.9, { max: 400, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
-  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { max: 400, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
-  F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20, 0.1, { max: 500, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
-  F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 21, 0.2, { max: 450, kw: ['patate douce'], brands: 'fraîche' }),
-  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21, 1.9, { max: 350, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
+  F('avoine', 'Flocons d’avoine (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { min: 30, max: 160, allergens: ['gluten'], kw: ['avoine', 'gruau'], brands: 'Quaker, Nature’s Path' }),
+  F('avoine_sg', 'Flocons d’avoine sans gluten (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { gf: true, min: 30, max: 120, kw: ['avoine', 'gruau'], brands: 'Bob’s Red Mill (certifiés sans gluten), Nature’s Path' }),
+  F('pain', 'Pain de blé entier', 'carb', ['dej'], 247, 13, 41, 3.4, { min: 35, max: 105, allergens: ['gluten'], unit: { n: 'tranche', p: 'tranches', g: 35, whole: true }, kw: ['pain', 'ble'], brands: 'Dempster’s, Bon Matin, Kirkland' }),
+  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28, 0.3, { min: 100, max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 123, 2.7, 26, 1, { min: 100, max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 31, 0.9, { min: 100, max: 400, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
+  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { gf: true, min: 100, max: 400, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
+  F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20, 0.1, { min: 150, max: 500, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
+  F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 21, 0.2, { min: 150, max: 450, kw: ['patate douce'], brands: 'fraîche' }),
+  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21, 1.9, { min: 100, max: 350, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
 
   // ---------- Lipides ----------
-  F('huile', 'Huile d’olive', 'fat', ['dej', 'din', 'sou'], 884, 0, 0, 100, { max: 20, unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['huile'], brands: 'Bertolli, Filippo Berio, Kirkland' }),
+  F('huile', 'Huile d’olive', 'fat', ['din', 'sou'], 884, 0, 0, 100, { max: 20, unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['huile'], brands: 'Bertolli, Filippo Berio, Kirkland' }),
   F('avocat', 'Avocat', 'fat', ['dej', 'din', 'sou'], 160, 2, 9, 15, { max: 150, unit: { n: 'demi-avocat', p: 'demi-avocats', g: 75, whole: true }, kw: ['avocat'], brands: 'frais' }),
   F('amandes', 'Amandes', 'fat', ['dej'], 579, 21, 22, 50, { max: 35, allergens: ['noix'], kw: ['amande', 'noix'], brands: 'Blue Diamond, Kirkland, Planters' }),
   F('grenoble', 'Noix de Grenoble', 'fat', ['dej', 'din', 'sou'], 654, 15, 14, 65, { max: 35, allergens: ['noix'], kw: ['grenoble', 'noix'], brands: 'Kirkland, Planters' }),
   F('arachide', 'Beurre d’arachide naturel', 'fat', ['dej'], 588, 25, 20, 50, { max: 32, allergens: ['arachide'], unit: { n: 'c. à soupe', p: 'c. à soupe', g: 16 }, kw: ['arachide', 'peanut'], brands: 'Adams, Kraft, Kirkland' }),
-  F('beurre', 'Beurre', 'fat', ['dej', 'din', 'sou'], 717, 0.9, 0.1, 81, { max: 20, allergens: ['lait'], unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['beurre'], brands: 'Lactantia, Beatrice, Kirkland' }),
+  F('beurre', 'Beurre', 'fat', ['dej', 'din', 'sou'], 717, 0.9, 0.1, 81, { max: 20, allergens: ['lait'], animal: 'dairy', unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['beurre'], brands: 'Lactantia, Beatrice, Kirkland' }),
 
   // ---------- Fruits ----------
   F('banane', 'Banane', 'fruit', ['dej', 'col'], 89, 1.1, 23, 0.3, { unit: { n: 'banane', p: 'bananes', g: 120, whole: true }, kw: ['banane'], brands: 'fraîche' }),
@@ -114,6 +114,8 @@ const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 export function allowed(food, prefs = {}) {
   const allergies = prefs.allergies || [];
   if (food.allergens.some((a) => allergies.includes(a))) return false;
+  // Pâtes ou avoine « sans gluten » : seulement si la personne évite le gluten (sinon, la version normale suffit)
+  if (food.gf && !allergies.includes('gluten')) return false;
   const diet = prefs.diet || 'aucun';
   if (diet === 'vegetarien' && (food.animal === 'meat' || food.animal === 'fish')) return false;
   if (diet === 'vegetalien' && food.animal) return false;
