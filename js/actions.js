@@ -23,7 +23,7 @@ export const ACTIONS_DOC = `IMPORTANT : tu peux maintenant faire toi-même des c
 \`\`\`
 La personne voit alors un bouton « Appliquer » : rien ne change sans son accord, donc ne dis pas que c'est déjà fait. Propose un bloc seulement quand elle demande un changement ou accepte ta suggestion ; si tu n'es pas sûr de ce qu'elle veut, pose d'abord la question. Pas de bloc si tu ne proposes rien.
 Types possibles (utilise seulement les identifiants fournis dans les données) :
-- {"type": "targets", "protein": g, "carbs": g, "fat": g, "water": litres (optionnel)} : cibles moyennes de la semaine ; calories = 4×protéines + 4×glucides + 9×lipides, jamais sous metabolisme_de_base_kcal.
+- {"type": "targets", "protein": g, "carbs": g, "fat": g, "water": litres (optionnel)} : cibles moyennes de la semaine ; calories = 4×protéines + 4×glucides + 9×lipides, jamais sous metabolisme_de_base_kcal. Pour changer seulement les calories : {"type": "targets", "calories": kcal} (les glucides s'ajustent, protéines et lipides gardés).
 - {"type": "food_prefs", "diet", "allergies", "other_allergies", "dislikes", "meals", "budget"} : mets seulement les champs à changer (la liste complète pour allergies / other_allergies) ; diet parmi ${Object.keys(DIETS).join(', ')} ; allergies parmi ${Object.keys(ALLERGENS).join(', ')} ; other_allergies : autres allergies (clés ${Object.keys(EXTRA_ALLERGIES).join(', ')} ou nom d'aliment) ; dislikes : texte séparé par des virgules ; meals 3 à 6 ; budget serre, normal ou genereux. Les repas sont recréés.
 - {"type": "reroll_meal", "meal": n} : refait le repas numéro n (1 = premier repas de la journée).
 - {"type": "swap_exercise", "from": id, "to": id} : remplace un exercice partout dans le programme (to parmi exercices_disponibles).
@@ -42,6 +42,14 @@ export function splitActions(text) {
   let actions = [];
   try { const j = JSON.parse(m[1].trim()); actions = (Array.isArray(j) ? j : [j]).filter((a) => a && typeof a.type === 'string').slice(0, 8); } catch { /* bloc illisible */ }
   return { text: String(text).replace(re, '').trim(), actions };
+}
+
+// Nouvelles calories en gardant protéines et lipides : les glucides comblent la différence (lipides réduits,
+// jamais sous 20 g, seulement s'il n'y a plus de glucides à enlever). Partagé avec « Modifier mes cibles ».
+export function carbsForCalories(kcal, protein, fat) {
+  let carbs = Math.round((kcal - protein * 4 - fat * 9) / 4);
+  if (carbs < 0) { carbs = 0; fat = Math.max(20, Math.floor((kcal - protein * 4) / 9)); }
+  return { carbs, fat };
 }
 
 const n = (v) => (v === undefined || v === null || v === '' ? NaN : Number(v));
@@ -70,6 +78,13 @@ function applyOne(a, st) {
   const { plan } = st;
   switch (a.type) {
     case 'targets': {
+      // Calories seules (ex. « mets-moi à 2700 kcal ») : protéines et lipides gardés sauf indication, glucides ajustés.
+      if (a.calories !== undefined && a.carbs === undefined) {
+        const k = Math.round(n(a.calories));
+        if (!within(k, 800, 6000)) throw new Error('calories hors limites (800 à 6000)');
+        const keep = { protein: a.protein ?? plan.protein, fat: a.fat ?? plan.fat };
+        a = { ...a, ...keep, ...carbsForCalories(k, n(keep.protein), n(keep.fat)) }; // copie : l'action d'origine reste intacte
+      }
       const p = Math.round(n(a.protein)), c = Math.round(n(a.carbs)), f = Math.round(n(a.fat));
       if (!within(p, 40, 400) || !within(c, 0, 700) || !within(f, 20, 250)) throw new Error('valeurs de cibles hors limites');
       if (p < st.weight * 1.2 || p > st.weight * 3.3) throw new Error(`protéines hors d'une zone sûre (${Math.round(st.weight * 1.2)} à ${Math.round(st.weight * 3.3)} g)`);
