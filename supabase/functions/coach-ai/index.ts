@@ -126,8 +126,11 @@ Deno.serve(async (req) => {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents,
       // Les modèles récents « réfléchissent » avant de répondre : on garde de la marge pour ne pas couper la réponse.
-      // format: 'json' (accueil d'un nouvel utilisateur) : Gemini renvoie un objet JSON pur, plus fiable à lire pour l'app.
-      generationConfig: { temperature: 0.6, maxOutputTokens: 2048, ...(body.format === 'json' ? { responseMimeType: 'application/json' } : {}) },
+      // format: 'json' (accueil d'un nouvel utilisateur) : Gemini renvoie un objet JSON pur, plus fiable à lire pour l'app,
+      // avec moins de « créativité » (questions simples : évite les mots inventés comme « que tu ne peaufines pas »).
+      generationConfig: body.format === 'json'
+        ? { temperature: 0.3, maxOutputTokens: 2048, responseMimeType: 'application/json' }
+        : { temperature: 0.6, maxOutputTokens: 2048 },
     });
 
     let text: string | undefined;
