@@ -1407,9 +1407,12 @@ function onbChatHtml(o) {
     </form>
     ${db.DEMO ? '<p class="muted" style="margin-top:10px">Mode démo : coach scripté (sans IA), pour tester le parcours.</p>' : ''}
   </section>
-  <button type="button" class="block ${o.done ? '' : 'ghost'}" data-act="onbMode" data-arg="recap">${o.done ? 'Voir mon récapitulatif et créer mon plan' : 'Passer au récapitulatif'}</button>
-  <button type="button" class="ghost block" data-act="onbMode" data-arg="form">Je préfère remplir un formulaire</button>
-  ${o.hist.length > 1 ? '<p class="center"><a href="#" data-act="onbRestart">Recommencer la discussion</a></p>' : ''}`;
+  ${o.done ? '<button type="button" class="block" data-act="onbMode" data-arg="recap">Voir mon récapitulatif et créer mon plan</button>' : ''}
+  <div class="onb-links">
+    ${o.done ? '' : '<button type="button" class="link" data-act="onbMode" data-arg="recap">Passer au récapitulatif</button><span aria-hidden="true">·</span>'}
+    <button type="button" class="link" data-act="onbMode" data-arg="form">Remplir un formulaire</button>
+    ${o.hist.length > 1 ? '<span aria-hidden="true">·</span><button type="button" class="link" data-act="onbRestart">Recommencer</button>' : ''}
+  </div>`;
 }
 function onbRecapHtml(o) {
   const d = o.draft;

@@ -218,3 +218,8 @@ input.mini { width: 58px; padding: 6px; text-align: center; }
 .friend-row { padding: 10px 0; border-top: 1px solid var(--line); }
 button.ghost.danger, .btn.ghost.danger { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .right { text-align: right; margin: 8px 0 0; font-size: 14px; }
+/* Liens discrets (options secondaires, ex. sous la discussion d'accueil) */
+button.link { background: none; border: 0; min-height: 0; padding: 6px 4px; color: var(--muted); font-weight: 500; font-size: 14px; }
+button.link:hover { background: none; color: var(--text); text-decoration: underline; }
+.onb-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 8px; margin-top: 6px; color: var(--muted); font-size: 14px; }
+.onboard > .block { margin-top: 4px; }
