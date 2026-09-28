@@ -6,6 +6,7 @@ import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { ACTIONS_DOC, splitActions, planActions } from './actions.js';
 import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
 const S = {
@@ -917,7 +918,7 @@ function aiContext() {
       plan_de_repas_jour_entrainement: mealsFor('train'), plan_de_repas_jour_repos: mealsFor('rest'),
     },
     programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => defOf(e).name) })),
-    guide_application_supplementaire: 'Onglet Séance > « Modifier mon programme » : on peut ajouter, renommer, déplacer ou supprimer un jour, ajouter/retirer/déplacer des exercices, changer les séries et répétitions, et créer un exercice personnalisé (nom, type charge/poids du corps/durée, consigne, lien vidéo). Onglet Repas > le bouton ↔ propose aussi une recherche libre d’aliment (marques précises). Réglages : unité de poids kg/lb. Ces changements se font à la main dans l’application ; tu n’as pas à dire que c’est impossible.',
+    guide_application_supplementaire: 'Onglet Séance > « Modifier mon programme » : on peut ajouter, renommer, déplacer ou supprimer un jour, ajouter/retirer/déplacer des exercices, changer les séries et répétitions, et créer un exercice personnalisé (nom, type charge/poids du corps/durée, consigne, lien vidéo). Onglet Repas > le bouton ↔ propose aussi une recherche libre d’aliment (marques précises). Réglages : unité de poids kg/lb.',
     semaine_legere: !!pl.deload,
     derniers_checkins: S.checkins.slice(-4).map(({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes }) => ({ week_start, weight, sleep, energy, soreness, stress, adherence_training, adherence_nutrition, notes })),
     ajustements_du_coach: (pl.reasons || []).map((r) => r.text),
@@ -946,7 +947,7 @@ function vCoach() {
       ? 'Pose tes questions sur ton entraînement, tes repas ou tes résultats. Je connais ton profil et ton plan. Je ne remplace pas un professionnel de la santé.'
       : 'Mode simple : je réponds aux questions sur l’application. Le coach IA complet n’est pas encore activé (voir le README, section « Coach IA »).'}</p>
     <div class="chat">
-      ${hist.length ? hist.map((m) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>`).join('') : '<p class="muted">Pose ta première question ou choisis une suggestion.</p>'}
+      ${hist.length ? hist.map((m, i) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>${m.actions ? actionCardHtml(m, i, i === lastApplied(hist)) : ''}`).join('') : '<p class="muted">Pose ta première question ou choisis une suggestion.</p>'}
       ${S.chatBusy ? '<div class="bubble ai">…</div>' : ''}
     </div>
     <div class="chips">
@@ -962,6 +963,88 @@ function vCoach() {
     ${canAI() ? '<p class="muted" style="margin-top:10px">Tes photos de progrès, quand tu les analyses, sont envoyées à Google (Gemini) pour cette réponse seulement.</p>' : ''}
   </section>`;
 }
+// ----- Changements proposés par le coach (voir actions.js) -----
+const planFields = (pl) => ({ calories: pl.calories, protein: pl.protein, carbs: pl.carbs, fat: pl.fat, program: pl.program, deload: pl.deload, hold: pl.hold, meal_plan: pl.meal_plan ?? null });
+const actionState = () => ({ profile: S.profile, plan: planFields(S.plan), prefs: prefs(), weight: lastWeight(), bmr: bmr(S.profile, lastWeight()) });
+// Contexte du chat : celui de l'avis IA + ce qu'il faut pour proposer des changements précis (identifiants).
+function chatContext() {
+  const pl = S.plan, eq = S.profile.equipment;
+  return {
+    ...aiContext(),
+    actions_possibles: ACTIONS_DOC,
+    metabolisme_de_base_kcal: bmr(S.profile, lastWeight()),
+    programme_detaille: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => ({ id: e.id, nom: defOf(e).name, series: e.sets, reps: `${e.lo}-${e.hi}${defOf(e).time ? ' s' : ''}` })) })),
+    exercices_disponibles: Object.entries(EXERCISES).filter(([, e]) => eq !== 'home' || e.home).map(([id, e]) => `${id} : ${e.name}`),
+    repas_numerotes: pl.meal_plan ? computeDay(dayVariant(pl, 'train'), pl.meal_plan, prefs()).meals.map((m, i) => `${i + 1}. ${SLOT_NAMES[m.slot]}`) : [],
+  };
+}
+// Ce que le coach relit de ses messages précédents : le texte + ce qui est advenu de ses propositions.
+const STATUS_TXT = { pending: 'en attente de réponse', applied: 'appliqué par la personne', declined: 'refusé par la personne', undone: 'appliqué puis annulé par la personne' };
+const chatText = (m) => (m.actions ? `${m.t}\n[Changements proposés : ${(m.labels || []).join(' ; ')} — ${STATUS_TXT[m.status] || ''}]` : m.t);
+const lastApplied = (hist) => hist.reduce((k, m, i) => (m.status === 'applied' && m.undo ? i : k), -1);
+function actionCardHtml(m, i, canUndo) {
+  if (m.status === 'applied' || m.status === 'undone') {
+    return `<div class="actions-card done"><b>${m.status === 'applied' ? '✅ Changements appliqués' : '↩️ Changements annulés'}</b>
+      <ul>${(m.done || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+      ${m.status === 'applied' && canUndo ? `<button type="button" class="ghost small" data-act="undoActions" data-i="${i}">Annuler ces changements</button>` : ''}</div>`;
+  }
+  if (m.status === 'declined') return `<div class="actions-card done"><b>Changements refusés</b><ul>${(m.labels || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
+  const { items, valid } = planActions(m.actions, actionState()); // revérifié sur l'état actuel à chaque affichage
+  return `<div class="actions-card">
+    <b>Changements proposés</b>
+    <ul>${items.map((it) => `<li class="${it.ok ? '' : 'bad'}">${it.ok ? '' : '⚠️ Impossible : '}${esc(it.label)}</li>`).join('')}</ul>
+    <div class="row">
+      ${valid ? `<button type="button" class="small" data-act="applyActions" data-i="${i}">Appliquer</button>` : ''}
+      <button type="button" class="ghost small" data-act="declineActions" data-i="${i}">${valid ? 'Non merci' : 'Fermer'}</button>
+    </div></div>`;
+}
+acts.applyActions = async (el) => {
+  const hist = chatLoad(), m = hist[+el.dataset.i];
+  if (!m?.actions || m.status !== 'pending') return;
+  el.disabled = true; el.textContent = 'Application…';
+  const { items, valid, result: st } = planActions(m.actions, actionState());
+  if (!valid) return render();
+  const done = items.filter((it) => it.ok).map((it) => it.label);
+  try {
+    const undo = { profile: structuredClone(S.profile), plan: planFields(S.plan) };
+    if (st.profileChanged) {
+      const p = { ...st.profile, food_prefs: st.prefs };
+      await db.saveProfile(p);
+      S.profile = p;
+    }
+    let meal_plan = st.plan.meal_plan;
+    if (st.regenMeals || !meal_plan) meal_plan = st.prefs.done ? buildChoices(st.prefs, Date.now(), st.plan) : null;
+    for (const k of st.rerolls || []) meal_plan = rerollMeal(meal_plan, k, st.prefs, dayVariant(st.plan, todayLog().day_type === 'rest' ? 'rest' : 'train'));
+    await savePlan({ ...st.plan, meal_plan, reasons: [{ icon: '💬', text: `Changé avec le coach IA : ${done.join(' ; ')}` }] });
+    hist.forEach((x) => { delete x.undo; }); // on ne peut annuler que le dernier changement
+    Object.assign(m, { status: 'applied', done, undo });
+    chatSave(hist);
+    toast('Changements appliqués');
+    await refresh();
+  } catch (e) { toast(e.message); render(); }
+};
+acts.declineActions = (el) => {
+  const hist = chatLoad(), m = hist[+el.dataset.i];
+  if (!m?.actions) return;
+  m.status = 'declined';
+  chatSave(hist);
+  render();
+};
+acts.undoActions = async (el) => {
+  const hist = chatLoad(), m = hist[+el.dataset.i];
+  if (!m?.undo || !confirm('Revenir à ce que tu avais avant ces changements ?')) return;
+  try {
+    await db.saveProfile(m.undo.profile);
+    S.profile = m.undo.profile;
+    await savePlan({ ...m.undo.plan, reasons: [{ icon: '↩️', text: 'Changements du coach IA annulés.' }] });
+    m.status = 'undone';
+    delete m.undo;
+    chatSave(hist);
+    toast('Changements annulés');
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+
 async function ask(q, photos = []) {
   const hist = chatLoad();
   hist.push({ r: 'user', t: q });
@@ -973,7 +1056,7 @@ async function ask(q, photos = []) {
   if (!canAI()) {
     text = faq(q) ?? FAQ_DEFAULT;
   } else {
-    const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: m.t })), context: aiContext(), photos };
+    const payload = { messages: hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: chatText(m) })), context: chatContext(), photos };
     const quota = (e) => /exceeded your current quota/i.test(e.message); // quota gratuit Gemini du jour épuisé
     const limited = (e) => quota(e) || /limite quotidienne/i.test(e.message); // inutile de réessayer
     const transient = (e) => !limited(e) && /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
@@ -994,7 +1077,10 @@ async function ask(q, photos = []) {
         : `${help ? `${help}\n\n` : ''}Le coach IA est momentanément indisponible, réessaie dans quelques instants.\n(${e.message})`;
     }
   }
-  hist.push({ r: 'ai', t: text });
+  const split = splitActions(text);
+  const msg = { r: 'ai', t: split.text || 'Voici ce que je te propose :' };
+  if (split.actions.length) Object.assign(msg, { actions: split.actions, status: 'pending', labels: planActions(split.actions, actionState()).items.map((i) => i.label) });
+  hist.push(msg);
   chatSave(hist);
   S.chatBusy = false;
   render();
@@ -1330,7 +1416,7 @@ acts.askAI = async (el) => {
       context: { ...aiContext(), ajustements_du_coach: cur.coach.messages.map((m) => m.text) },
       photos,
     });
-    await db.saveCheckin({ ...cur, coach: { ...cur.coach, ai: text } });
+    await db.saveCheckin({ ...cur, coach: { ...cur.coach, ai: splitActions(text).text } });
     await refresh();
   } catch (e) { toast('Avis IA indisponible : ' + e.message); el.disabled = false; el.textContent = 'Demander un avis'; }
 };
@@ -1343,7 +1429,7 @@ acts.askGoal = async (el) => {
       messages: [{ role: 'user', text: `Voici ce que la personne a écrit sur son but avec l’entraînement, dans ses mots : « ${text} ». En 3 à 6 phrases, dis-lui si son plan actuel (jours, matériel, type d’entraînement, nutrition) correspond bien à ce but, et propose un ou deux réglages concrets à changer dans l’app si besoin (avec le nom exact du bouton).` }],
       context: aiContext(),
     });
-    const food_prefs = { ...prefs(), training_goal_text: text, training_goal_ai: reply };
+    const food_prefs = { ...prefs(), training_goal_text: text, training_goal_ai: splitActions(reply).text };
     await db.saveProfile({ ...S.profile, food_prefs });
     S.profile = { ...S.profile, food_prefs };
     toast('Avis reçu');

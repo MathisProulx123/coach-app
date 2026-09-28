@@ -65,6 +65,12 @@ Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_0
 
 `supabase/migration_004.sql` rend chaque compte privé : on ne voit plus que ses propres données et celles des amis reliés. Vos 2 comptes actuels sont reliés automatiquement (seulement s'il y a au plus 2 profils), donc rien ne change pour vous. Un nouvel utilisateur se relie à un ami dans **Réglages → Partage avec un ami** (code d'invitation valide 7 jours). **À appliquer avant d'ouvrir les inscriptions.** En cas de problème, `migration_004_retour.sql` remet les anciennes règles sans rien effacer.
 
+## Le coach IA peut modifier l'application
+
+Dans l'onglet **Coach**, demande un changement en mots (« remplace le squat, j'ai mal au genou », « enlève le poisson de mes repas », « monte mes protéines ») : le coach répond puis affiche une carte **Changements proposés**. Rien ne change avant de toucher **Appliquer** ; **Annuler ces changements** revient en arrière. L'app vérifie chaque changement (jamais sous le métabolisme de base, exercices compatibles avec ton matériel, pas de jour vide) et refuse les autres en expliquant pourquoi.
+
+Il peut changer : les cibles (protéines, glucides, lipides, eau), les préférences alimentaires, refaire un repas, remplacer / ajouter / retirer un exercice, les séries et répétitions, l'objectif, l'activité, les jours, le matériel, le type d'entraînement et l'unité de poids. Il ne peut pas supprimer de données, faire un check-in ni gérer le compte ou les amis. La logique est dans `js/actions.js`. Demande la fonction `coach-ai` à jour.
+
 ## Accueil d'un nouvel utilisateur (onboarding avec le coach IA)
 
 À la création d'un compte, le coach IA fait connaissance par une courte discussion : prénom et objectif, sexe, âge, taille et poids (livres acceptées), jours et matériel, activité et blessures, puis alimentation (régime, allergies, aliments détestés, repas par jour, budget). Il remplit un **brouillon** ; la personne vérifie et corrige tout dans un **récapitulatif**, puis « Créer mon plan » crée d'un coup le profil, le programme, les cibles et le plan de repas. Un mineur ou une mention de grossesse, de maladie ou de trouble alimentaire affiche un avertissement recommandant un professionnel de la santé.

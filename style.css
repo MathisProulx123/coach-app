@@ -204,3 +204,9 @@ input.mini { width: 58px; padding: 6px; text-align: center; }
 .onboard .brand .logo { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 8px; }
 .onboard .brand .logo svg { width: 24px; height: 24px; }
 .onboard .brand h1 { font-size: 22px; }
+.actions-card { align-self: stretch; margin: -2px 0 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); font-size: 14.5px; }
+.actions-card ul { margin: 6px 0 10px; padding-left: 18px; }
+.actions-card li { margin: 3px 0; }
+.actions-card li.bad { color: var(--warn); }
+.actions-card.done { background: var(--field); border-color: var(--line); color: var(--muted); }
+.actions-card.done b { color: var(--text); }
