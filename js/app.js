@@ -53,8 +53,13 @@ async function ensureMealPlan() {
 }
 const prefs = () => ({
   allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '',
-  load_units: {}, plate_lb: 45, bar_lb: 45, ...(S.profile?.food_prefs || {}),
+  load_units: {}, plate_lb: 45, bar_lb: 45, training_purpose: 'fitness', training_style: 'hypertrophy',
+  ...(S.profile?.food_prefs || {}),
 });
+const TRAINING_PURPOSES = { lose_weight: 'Perdre du poids', fitness: 'Être en forme', bodybuilder: 'Bodybuilding' };
+const TRAINING_STYLES = {
+  strength: 'Force (peu de répétitions)', hypertrophy: 'Hypertrophie (6 à 10 répétitions)', endurance: 'Endurance musculaire (10+ répétitions)',
+};
 // Chaque exercice a sa propre unité de charge (haltères en lb, machine en kg, barre en plates…).
 const loadUnitFor = (exId) => prefs().load_units[exId] || 'kg';
 async function setExUnit(exId, unit) {
@@ -526,7 +531,7 @@ acts.saveProgram = async () => {
 acts.cancelEdit = () => { S.draft = null; location.hash = '#/train'; };
 acts.resetProgram = () => {
   if (!confirm('Remplacer ton programme par celui de départ ? Tes modifications (dans ce brouillon) seront perdues.')) return;
-  S.draft = buildProgram(S.profile.days_per_week, S.profile.equipment);
+  S.draft = buildProgram(S.profile.days_per_week, S.profile.equipment, prefs().training_style);
   render();
 };
 
@@ -874,6 +879,7 @@ function aiContext() {
     profil: {
       objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
       poids_kg: lastWeight(), unite_poids_affichee: wUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
+      but_entrainement: TRAINING_PURPOSES[pr.training_purpose], type_entrainement: TRAINING_STYLES[pr.training_style],
       objectif_chiffre: goalStatus(profileWithGoal(), lastWeight()) ?? 'aucun poids/date visés fixés',
     },
     nutrition: {
@@ -989,6 +995,11 @@ function profileForm(p = {}, label = 'Enregistrer') {
       <div><label>Jours d’entraînement / semaine</label><select name="days_per_week">${[2, 3, 4, 5, 6].map((n) => opt(String(n), n, String(p.days_per_week ?? 4))).join('')}</select></div>
       <div><label>Matériel</label><select name="equipment">${opt('gym', 'Salle de sport', p.equipment)}${opt('home', 'Maison (haltères)', p.equipment)}</select></div>
     </div>
+    <label>But de l’entraînement</label>
+    <select name="training_purpose">${Object.entries(TRAINING_PURPOSES).map(([k, v]) => opt(k, v, pr.training_purpose)).join('')}</select>
+    <label>Tu cherches plutôt…</label>
+    <select name="training_style">${Object.entries(TRAINING_STYLES).map(([k, v]) => opt(k, v, pr.training_style)).join('')}</select>
+    <p class="muted">Change les fourchettes de répétitions de tout ton programme (ex. squat en 3–5 pour la force, 9–14 pour l’endurance).</p>
     <label>Activité hors entraînement</label>
     <select name="activity">${opt('low', 'Surtout assis', p.activity)}${opt('medium', 'Assez actif', p.activity ?? 'medium')}${opt('high', 'Très actif / travail physique', p.activity)}</select>
     <label>Blessures ou exercices à éviter (optionnel)</label>
@@ -1129,14 +1140,18 @@ forms.profile = async (form) => {
     start_weight: toKg(+fd.start_weight, wUnit(old)), goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
-  p.food_prefs = { ...prefs(), goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, wUnit(old)) : null, goal_date: fd.goal_date || '' };
-  if (old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment)
-      && !confirm('Changer les jours ou le matériel remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
+  const oldPr = prefs();
+  p.food_prefs = {
+    ...oldPr, goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, wUnit(old)) : null, goal_date: fd.goal_date || '',
+    training_purpose: fd.training_purpose, training_style: fd.training_style,
+  };
+  const programChanged = !!old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment || oldPr.training_style !== p.food_prefs.training_style);
+  if (programChanged && !confirm('Changer les jours, le matériel ou le type d’entraînement remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
   try {
     await db.saveProfile(p);
     if (!old) {
       await db.savePlan({
-        user_id: S.me.id, ...calcTargets(p, p.start_weight), program: buildProgram(p.days_per_week, p.equipment),
+        user_id: S.me.id, ...calcTargets(p, p.start_weight), program: buildProgram(p.days_per_week, p.equipment, p.food_prefs.training_style),
         deload: false, hold: false, meal_plan: null,
         reasons: [{ icon: '🚀', text: 'Plan de départ créé selon ton profil. Fais ton premier check-in pour lancer le suivi.' }],
       });
@@ -1144,11 +1159,10 @@ forms.profile = async (form) => {
       return;
     }
     S.profile = p;
-    const programChanged = old.days_per_week !== p.days_per_week || old.equipment !== p.equipment;
     const targetsChanged = old.goal !== p.goal || old.activity !== p.activity;
     if (programChanged || targetsChanged) {
       const ch = { reasons: [{ icon: '🛠️', text: 'Plan mis à jour après le changement de ton profil.' }] };
-      if (programChanged) ch.program = buildProgram(p.days_per_week, p.equipment);
+      if (programChanged) ch.program = buildProgram(p.days_per_week, p.equipment, p.food_prefs.training_style);
       if (targetsChanged) Object.assign(ch, calcTargets(p, lastWeight()));
       await savePlan(ch);
     }

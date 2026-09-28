@@ -189,7 +189,25 @@ const LAYOUT = {
   6: [['Push A', 'PUSH_A'], ['Pull A', 'PULL_A'], ['Jambes A', 'LEGS_A'], ['Push B', 'PUSH_B'], ['Pull B', 'PULL_B'], ['Jambes B', 'LEGS_B']],
 };
 
-export function buildProgram(days, equipment) {
+// Les modèles ci-dessus sont écrits pour l'hypertrophie (le choix par défaut). Pour la force ou l'endurance,
+// on ajuste chaque fourchette de répétitions à partir de sa valeur de départ, plutôt que de tout réécrire :
+// ça garde automatiquement les gros mouvements (squat, développé...) proportionnellement plus bas que les
+// exercices d'isolation (élévations, curls...), comme dans les modèles d'origine.
+const STYLE_ADJUST = {
+  hypertrophy: (lo, hi) => [lo, hi],
+  strength: (lo, hi) => { const l = Math.max(2, Math.round(lo * 0.5)); return [l, Math.max(l + 2, Math.round(hi * 0.6))]; },
+  endurance: (lo, hi) => [lo + 4, Math.min(25, hi + 6)],
+};
+function applyStyle(list, style) {
+  const adjust = STYLE_ADJUST[style] || STYLE_ADJUST.hypertrophy;
+  return list.map((e) => {
+    if (EXERCISES[e.id]?.time) return e; // les tenues chronométrées (planche...) ne changent pas avec le style
+    const [lo, hi] = adjust(e.lo, e.hi);
+    return { ...e, lo, hi };
+  });
+}
+
+export function buildProgram(days, equipment, style = 'hypertrophy') {
   const layout = LAYOUT[Math.min(6, Math.max(2, days))];
   return layout.map(([label, key]) => {
     let list = GYM[key].map((e) => ({ ...e }));
@@ -199,6 +217,6 @@ export function buildProgram(days, equipment) {
         .map((e) => ({ ...e, id: HOME_MAP[e.id] || e.id }))
         .filter((e) => !seen.has(e.id) && seen.add(e.id));
     }
-    return { label, exercises: list };
+    return { label, exercises: applyStyle(list, style) };
   });
 }
