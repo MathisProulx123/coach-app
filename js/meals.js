@@ -26,6 +26,10 @@ const isSnack = (slot) => slot === 'col' || slot === 'col2' || slot === 'col3';
 const slotKey = (slot) => (slot === 'col2' || slot === 'col3' ? 'col' : slot);
 export const ROLE_NAMES = { protein: 'Protéines', carb: 'Glucides', fat: 'Lipides', fruit: 'Fruit', veg: 'Légumes' };
 const VEG_GRAMS = 150;
+// Portion la plus basse / la plus haute d'un aliment. min : sous ce seuil la portion n'a pas de sens dans une
+// assiette (ex. 50 g de bœuf, 10 g d'avoine) ; les fruits peuvent monter jusqu'à ~2 portions les jours à gros glucides.
+const minG = (food) => food.min ?? 0;
+const maxG = (food, role) => (role === 'fruit' ? Math.max(260, food.unit ? food.unit.g * 2 : 0) : food.max ?? 600);
 
 function rng(seed) { // petit générateur aléatoire reproductible
   let a = seed >>> 0;
@@ -37,7 +41,10 @@ const candidates = (role, slot, prefs) => FOODS.filter((f) => f.role === role &&
 // Écart entre un plan de repas et les cibles de la journée (plus c'est petit, mieux c'est)
 function dayError(T, choices, prefs) {
   const t = computeDay(T, choices, prefs).totals;
-  return Math.abs(t.k / T.calories - 1) * 2 + Math.abs(t.p / T.protein - 1) * 2 + Math.abs(t.c / T.carbs - 1) + Math.abs(t.f / T.fat - 1);
+  // Les protéines sont un minimum : les rater coûte cher, les dépasser un peu (vraies portions de viande, féculents
+  // riches en protéines sur une grosse cible) beaucoup moins.
+  const dp = t.p / T.protein - 1;
+  return Math.abs(t.k / T.calories - 1) * 2 + (dp < 0 ? -dp * 2 : dp * 0.5) + Math.abs(t.c / T.carbs - 1) + Math.abs(t.f / T.fat - 1);
 }
 
 // Choisit les aliments de chaque repas en respectant allergies, régime et aliments non aimés.
@@ -128,7 +135,11 @@ const ZERO = { k: 0, p: 0, c: 0, f: 0 };
 const KEY = { protein: 'p', carb: 'c', fat: 'f' };
 
 // Trouve les quantités (en grammes) pour atteindre les cibles du repas.
-function solve(items, target, keys) {
+// « Une vraie portion ou rien » : un féculent (ou la protéine d'une collation) dont il ne faudrait qu'une miette
+// est retiré plutôt que servi en quantité ridicule (ex. souper sans féculent en sèche, collation = un fruit).
+// La protéine d'un repas principal, elle, garde toujours au moins sa portion minimale.
+const droppable = (it, snack) => it.role === 'carb' || (snack && it.role === 'protein');
+function solve(items, target, keys, snack = false) {
   const q = items.map((it) => it.fixed ?? 0);
   const vars = items.map((it, i) => i).filter((i) => items[i].fixed == null);
   for (let iter = 0; iter < 14; iter++) {
@@ -137,7 +148,9 @@ function solve(items, target, keys) {
       if (!keys.includes(key)) continue;
       const others = items.reduce((s, it, j) => (j === i ? s : s + (it.food.per100[key] * q[j]) / 100), 0);
       const per = items[i].food.per100[key] / 100;
-      q[i] = per > 0 ? Math.min(items[i].food.max ?? 600, Math.max(0, (target[key] - others) / per)) : 0;
+      const raw = (target[key] - others) / per;
+      const lo = minG(items[i].food);
+      q[i] = per <= 0 ? 0 : droppable(items[i], snack) && raw < lo / 2 ? 0 : Math.min(items[i].food.max ?? 600, Math.max(lo, raw));
     }
   }
   // Si les plafonds de portions laissent le repas sous sa cible de calories, on complète avec glucides puis lipides.
@@ -146,7 +159,7 @@ function solve(items, target, keys) {
     let short = target.k - kcal();
     for (const role of ['carb', 'fat']) {
       const i = items.findIndex((it) => it.role === role);
-      if (i < 0 || short < 40) continue;
+      if (i < 0 || short < 40 || (q[i] === 0 && droppable(items[i], snack))) continue; // un féculent retiré le reste
       const kpg = items[i].food.per100.k / 100;
       const room = (items[i].food.max ?? 600) - q[i];
       const add = Math.max(0, Math.min(room, short / kpg));
@@ -160,6 +173,7 @@ function solve(items, target, keys) {
 // Arrondit à une quantité pratique (œufs entiers, cuillères, 5 g…)
 function practical(food, g, role) {
   const u = food.unit;
+  if (g <= 0 && role !== 'fruit' && role !== 'veg') return { g: 0 }; // aliment retiré du repas
   // Si la cible de lipides est déjà atteinte, on n'ajoute pas de portion minimale de gras
   if (role === 'fat' && g < 3) return { g: 0 };
   if (role === 'fruit' || role === 'veg') {
@@ -204,7 +218,7 @@ export function computeDay(targets, choices, prefs = {}) {
       if (it.role === 'fruit') fixed = food.unit ? food.unit.g : 100;
       return { role: it.role, food, fixed };
     }).filter(Boolean);
-    const q = solve(items, T, keys);
+    const q = solve(items, T, keys, isSnack(meal.slot));
     const built = items.map((it, i) => {
       const p = practical(it.food, q[i], it.role);
       return { role: it.role, food: it.food, g: p.g, units: p.units ?? null, macros: macrosOf(it.food, p.g) };
@@ -215,7 +229,7 @@ export function computeDay(targets, choices, prefs = {}) {
       if (short > 10 && short > T.p * 0.15) {
         const sup = FOODS.find((f) => f.supplement && allowed(f, prefs) && !built.some((b) => b.food.id === f.id));
         if (sup) {
-          const g = Math.min(sup.max, Math.max(15, (short / sup.per100.p) * 100));
+          const g = Math.min(sup.max, Math.max(minG(sup) || 15, (short / sup.per100.p) * 100));
           const p = practical(sup, g, 'protein');
           built.push({ role: 'protein', extra: true, food: sup, g: p.g, units: p.units ?? null, macros: macrosOf(sup, p.g) });
         }
@@ -245,7 +259,8 @@ export function computeDay(targets, choices, prefs = {}) {
     out[i] = { slot: meal.slot, items, totals: total(items) };
   });
   finishDay(out, targets, prefs);
-  return { meals: out, totals: out.reduce((s, m) => add(s, m.totals), ZERO) };
+  // crowded : il a fallu ajouter un aliment de plus à un repas pour atteindre la cible (portions à l'étroit)
+  return { meals: out, totals: out.reduce((s, m) => add(s, m.totals), ZERO), crowded: !!out.crowded };
 }
 
 // Dernière retouche : ajuste UN aliment à quantité continue par macro (protéines, glucides, lipides)
@@ -262,18 +277,22 @@ function finishDay(mealsOut, targets, prefs = {}) {
     if (Math.abs(residual) < 1.5) continue;
     // Tous les aliments ajustables (quantité continue) pour ce macro, du plus de marge au moins de marge :
     // si un seul ne suffit pas à absorber l'écart (plafond atteint), on complète avec le suivant.
+    // Glucides en trop peu : on grossit d'abord les fruits (1 fruit de plus au déjeuner ou en collation, c'est
+    // plus naturel qu'un 2e féculent dans l'assiette), puis les féculents.
+    const roles = key === 'c' && residual > 0 ? ['fruit', 'carb'] : [ROLE_OF_MACRO[key]];
     const candidates = [];
     for (const m of mealsOut) for (const it of m.items) {
-      if (it.role !== ROLE_OF_MACRO[key] || (it.food.unit && it.food.unit.whole)) continue;
-      const room = residual > 0 ? (it.food.max ?? 600) - it.g : it.g;
+      if (!roles.includes(it.role) || it.extra || it.g <= 0 || (it.food.unit && it.food.unit.whole && it.role !== 'fruit')) continue;
+      const room = residual > 0 ? maxG(it.food, it.role) - it.g : it.g - minG(it.food);
       if (room > 3) candidates.push({ meal: m, item: it });
     }
-    candidates.sort((a, b) => (residual > 0 ? (b.item.food.max ?? 600) - b.item.g - ((a.item.food.max ?? 600) - a.item.g) : b.item.g - a.item.g));
+    const rank = (c) => roles.indexOf(c.item.role) * 10000 - (residual > 0 ? maxG(c.item.food, c.item.role) - c.item.g : c.item.g);
+    candidates.sort((a, b) => rank(a) - rank(b));
     for (const { meal, item } of candidates) {
       if (Math.abs(residual) < 1.5) break;
       const per = item.food.per100[key] / 100;
       if (per <= 0) continue;
-      const room = residual > 0 ? (item.food.max ?? 600) - item.g : item.g;
+      const room = residual > 0 ? maxG(item.food, item.role) - item.g : item.g - minG(item.food);
       const deltaG = Math.max(-room, Math.min(room, residual / per));
       const before = item.macros[key];
       const p = practical(item.food, item.g + deltaG, item.role);
@@ -282,16 +301,23 @@ function finishDay(mealsOut, targets, prefs = {}) {
       residual -= item.macros[key] - before;
     }
     // Tout est déjà à son plafond mais il manque encore beaucoup : ajoute un aliment de plus.
+    // Il est ajouté à un repas où il a sa place (pas d'avoine au souper), de préférence un repas qui n'a pas déjà
+    // reçu un ajout, et en commençant par le plus petit repas pour répartir les portions.
     while (residual > 30) {
       const used = new Set(mealsOut.flatMap((m) => m.items.map((it) => it.food.id)));
-      const extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && allowed(f, prefs) && !used.has(f.id) && !(f.unit && f.unit.whole));
+      const order = [...mealsOut].sort((a, b) => (a.items.some((i) => i.extra) - b.items.some((i) => i.extra)) || a.totals.k - b.totals.k);
+      let meal = null, extra = null;
+      for (const m of order) {
+        extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && !f.supplement && f.slots.includes(slotKey(m.slot)) && allowed(f, prefs) && !used.has(f.id) && !(f.unit && f.unit.whole));
+        if (extra) { meal = m; break; }
+      }
       if (!extra) break; // plus aucun aliment disponible pour ce macro dans les restrictions actuelles
-      const meal = mealsOut.reduce((a, b) => (b.totals.k > a.totals.k ? b : a));
       const per = extra.per100[key] / 100;
-      const g = Math.min(extra.max ?? 300, residual / per);
+      const g = Math.max(minG(extra), Math.min(extra.max ?? 300, residual / per));
       const p = practical(extra, g, ROLE_OF_MACRO[key]);
       const macros = macrosOf(extra, p.g);
       meal.items.push({ role: ROLE_OF_MACRO[key], extra: true, food: extra, g: p.g, units: p.units ?? null, macros });
+      mealsOut.crowded = true; // la cible déborde des repas prévus : l'app conseillera d'ajouter des repas
       meal.totals = add(meal.totals, macros);
       residual -= macros[key];
     }
@@ -305,8 +331,8 @@ function finishDay(mealsOut, targets, prefs = {}) {
     if (Math.abs(kResidual) < 15) break;
     const candidates = [];
     for (const m of mealsOut) for (const it of m.items) {
-      if (it.role !== role || (it.food.unit && it.food.unit.whole)) continue;
-      const room = kResidual > 0 ? (it.food.max ?? 600) - it.g : it.g;
+      if (it.role !== role || it.g <= 0 || (it.food.unit && it.food.unit.whole)) continue;
+      const room = kResidual > 0 ? (it.food.max ?? 600) - it.g : it.g - minG(it.food);
       if (room > 2) candidates.push({ meal: m, item: it });
     }
     candidates.sort((a, b) => (kResidual > 0 ? (b.item.food.max ?? 600) - b.item.g - ((a.item.food.max ?? 600) - a.item.g) : b.item.g - a.item.g));
@@ -314,7 +340,7 @@ function finishDay(mealsOut, targets, prefs = {}) {
       if (Math.abs(kResidual) < 15) break;
       const per = item.food.per100.k / 100;
       if (per <= 0) continue;
-      const room = kResidual > 0 ? (item.food.max ?? 600) - item.g : item.g;
+      const room = kResidual > 0 ? (item.food.max ?? 600) - item.g : item.g - minG(item.food);
       const deltaG = Math.max(-room, Math.min(room, kResidual / per));
       const beforeK = item.macros.k;
       const p = practical(item.food, item.g + deltaG, item.role);

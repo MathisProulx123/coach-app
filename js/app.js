@@ -639,6 +639,11 @@ function vFood() {
     <p class="muted">Moyenne hebdomadaire : ${pl.calories} kcal · ${pl.protein} g prot. · ${pl.carbs} g gluc. · ${pl.fat} g lip. Le coach ajuste cette moyenne chaque semaine selon ton check-in.</p>
     <button class="ghost block" data-act="editTargets">Modifier mes cibles</button>
   </section>
+  ${cd.crowded && pr.meals < 6 ? `<section class="card warn">
+    <h2>💡 Ta cible est grosse pour ${pr.meals} repas</h2>
+    <p>Pour atteindre ${dayT.calories} kcal, il a fallu ajouter un aliment en plus à un repas et les portions sont à l’étroit. Avec 6 repas (dont 3 collations), elles seraient plus normales.</p>
+    <button type="button" class="block" data-act="moreMeals">Passer à 6 repas</button>
+  </section>` : ''}
   <p class="muted">Quantités en aliments cuits, sauf indication. Les marques sont des exemples courants et les valeurs sont des moyennes : vérifie l’étiquette de ta marque.</p>
   ${cd.meals.map((m, si) => `
     <section class="card">
@@ -740,6 +745,16 @@ acts.pickCustomFood = async (el) => {
     await savePlan({ meal_plan: swapItemCustom(S.plan.meal_plan, +d.slot, +d.item, food) });
     closeSheet();
     toast(`${food.name} ajouté à ton plan`);
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+acts.moreMeals = async () => {
+  const pr = { ...prefs(), meals: 6, done: true };
+  try {
+    await db.saveProfile({ ...S.profile, food_prefs: pr });
+    S.profile = { ...S.profile, food_prefs: pr };
+    await savePlan({ meal_plan: buildChoices(pr, Date.now(), S.plan) });
+    toast('Plan de repas refait sur 6 repas');
     await refresh();
   } catch (e) { toast(e.message); }
 };
