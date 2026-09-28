@@ -9,6 +9,7 @@ export const EXERCISES = {
   // --- Jambes ---
   squat: { name: 'Squat', lower: true, img: 'Barbell_Squat', cue: 'Pieds à largeur d’épaules, descends les hanches vers l’arrière jusqu’aux cuisses parallèles, dos droit, remonte en poussant dans les talons.' },
   legpress: { name: 'Presse à cuisses', lower: true, img: 'Leg_Press', cue: 'Dos collé au dossier, descends les genoux vers la poitrine sans décoller le bassin, pousse sans verrouiller les genoux.' },
+  hack_squat: { name: 'Hack squat (machine)', lower: true, img: 'Hack_Squat', cue: 'Dos et épaules bien calés contre les appuis, pieds à largeur d’épaules sur la plateforme, descends en contrôlant jusqu’aux cuisses parallèles, pousse dans les talons sans verrouiller les genoux.' },
   rdl: { name: 'Soulevé de terre roumain', lower: true, img: 'Romanian_Deadlift', cue: 'Jambes presque tendues, pousse les hanches vers l’arrière en gardant la barre près des jambes, dos plat, remonte en serrant les fessiers.' },
   legcurl: { name: 'Curl jambes (allongé)', lower: true, inc: 2.5, img: 'Lying_Leg_Curls', cue: 'Ramène les talons vers les fessiers en contrôlant, sans balancer, puis redescends lentement.' },
   seated_curl: { name: 'Curl jambes (assis)', lower: true, inc: 2.5, img: 'Seated_Leg_Curl', cue: 'Assis, cale les jambes, ramène les talons sous le siège en contrôlant, reviens lentement.' },
@@ -78,8 +79,9 @@ export const EXERCISES = {
 
 // Variantes proposées quand un exercice ne convient pas (douleur, matériel manquant, pas envie).
 const ALT = {
-  squat: ['legpress', 'goblet', 'db_squat', 'bulg', 'stepup', 'bw_squat'],
-  legpress: ['squat', 'goblet', 'bulg', 'stepup', 'db_squat'],
+  squat: ['legpress', 'hack_squat', 'goblet', 'db_squat', 'bulg', 'stepup', 'bw_squat'],
+  legpress: ['squat', 'hack_squat', 'goblet', 'bulg', 'stepup', 'db_squat'],
+  hack_squat: ['squat', 'legpress', 'goblet', 'bulg', 'db_squat'],
   rdl: ['db_rdl', 'good_morning', 'hip_thrust', 'seated_curl'],
   legcurl: ['seated_curl', 'db_rdl', 'glute_bridge', 'good_morning'],
   seated_curl: ['legcurl', 'db_rdl', 'glute_bridge'],
@@ -155,7 +157,7 @@ export const imgFallback = (id, n) => `https://raw.githubusercontent.com/yuhonas
 
 // Version « maison » : chaque exercice de salle est remplacé par un équivalent.
 const HOME_MAP = {
-  squat: 'goblet', legpress: 'bulg', rdl: 'db_rdl', legcurl: 'glute_bridge', legext: 'bulg', calf: 'calf_db',
+  squat: 'goblet', legpress: 'bulg', hack_squat: 'goblet', rdl: 'db_rdl', legcurl: 'glute_bridge', legext: 'bulg', calf: 'calf_db',
   hip_thrust: 'glute_bridge', bench: 'db_bench', incline_db: 'pushup_inc', ohp: 'db_ohp', lateral: 'db_lateral',
   tricep_push: 'tri_ext', row: 'db_row', lat_pd: 'pullover', cable_row: 'db_row', face_pull: 'reardelt',
   curl: 'db_curl', pullup: 'db_row', dips: 'pushup',
