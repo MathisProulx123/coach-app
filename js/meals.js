@@ -237,7 +237,7 @@ export function computeDay(targets, choices, prefs = {}) {
     const items = build(meal, { k: rest.k * r, p: rest.p * r, c: rest.c * r, f: rest.f * r }, ['p', 'c', 'f']);
     out[i] = { slot: meal.slot, items, totals: total(items) };
   });
-  finishDay(out, targets);
+  finishDay(out, targets, prefs);
   return { meals: out, totals: out.reduce((s, m) => add(s, m.totals), ZERO) };
 }
 
@@ -245,9 +245,11 @@ export function computeDay(targets, choices, prefs = {}) {
 // pour que le total du jour colle à quelques grammes près à la cible exacte (ex. « 200 g de protéines »),
 // même après un échange d'aliment ou un changement de cible. Ignore les aliments à unité entière
 // (œufs, tranches de pain…) pour ne pas afficher des quantités bizarres comme « 2,3 œufs ».
+// Sur une très grosse cible (ex. prise de masse), même les aliments à leur plafond peuvent ne pas suffire :
+// dans ce cas on ajoute carrément un aliment de plus, plutôt que de laisser un écart.
 const ROLE_OF_MACRO = { p: 'protein', c: 'carb', f: 'fat' };
 const TARGET_KEY = { p: 'protein', c: 'carbs', f: 'fat' };
-function finishDay(mealsOut, targets) {
+function finishDay(mealsOut, targets, prefs = {}) {
   for (const key of ['p', 'c', 'f']) {
     let residual = targets[TARGET_KEY[key]] - mealsOut.reduce((s, m) => add(s, m.totals), ZERO)[key];
     if (Math.abs(residual) < 1.5) continue;
@@ -271,6 +273,47 @@ function finishDay(mealsOut, targets) {
       Object.assign(item, { g: p.g, units: p.units ?? null, macros: macrosOf(item.food, p.g) });
       meal.totals = meal.items.reduce((s, x) => add(s, x.macros), ZERO);
       residual -= item.macros[key] - before;
+    }
+    // Tout est déjà à son plafond mais il manque encore beaucoup : ajoute un aliment de plus.
+    while (residual > 30) {
+      const used = new Set(mealsOut.flatMap((m) => m.items.map((it) => it.food.id)));
+      const extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && allowed(f, prefs) && !used.has(f.id) && !(f.unit && f.unit.whole));
+      if (!extra) break; // plus aucun aliment disponible pour ce macro dans les restrictions actuelles
+      const meal = mealsOut.reduce((a, b) => (b.totals.k > a.totals.k ? b : a));
+      const per = extra.per100[key] / 100;
+      const g = Math.min(extra.max ?? 300, residual / per);
+      const p = practical(extra, g, ROLE_OF_MACRO[key]);
+      const macros = macrosOf(extra, p.g);
+      meal.items.push({ role: ROLE_OF_MACRO[key], extra: true, food: extra, g: p.g, units: p.units ?? null, macros });
+      meal.totals = add(meal.totals, macros);
+      residual -= macros[key];
+    }
+  }
+  // Dernier ajustement : les calories d'un aliment (comme sur un vrai emballage) ne suivent pas toujours
+  // exactement « 4 kcal/g de protéines et glucides, 9 kcal/g de lipides » (fibres, arrondis…). Même avec des
+  // protéines/glucides/lipides déjà justes, ce petit écart par aliment s'accumule sur toute la journée.
+  // On comble ce qui reste via un aliment gras ou glucidique (leur variation en grammes reste minime).
+  let kResidual = targets.calories - mealsOut.reduce((s, m) => add(s, m.totals), ZERO).k;
+  for (const role of ['fat', 'carb', 'protein']) {
+    if (Math.abs(kResidual) < 15) break;
+    const candidates = [];
+    for (const m of mealsOut) for (const it of m.items) {
+      if (it.role !== role || (it.food.unit && it.food.unit.whole)) continue;
+      const room = kResidual > 0 ? (it.food.max ?? 600) - it.g : it.g;
+      if (room > 2) candidates.push({ meal: m, item: it });
+    }
+    candidates.sort((a, b) => (kResidual > 0 ? (b.item.food.max ?? 600) - b.item.g - ((a.item.food.max ?? 600) - a.item.g) : b.item.g - a.item.g));
+    for (const { meal, item } of candidates) {
+      if (Math.abs(kResidual) < 15) break;
+      const per = item.food.per100.k / 100;
+      if (per <= 0) continue;
+      const room = kResidual > 0 ? (item.food.max ?? 600) - item.g : item.g;
+      const deltaG = Math.max(-room, Math.min(room, kResidual / per));
+      const beforeK = item.macros.k;
+      const p = practical(item.food, item.g + deltaG, item.role);
+      Object.assign(item, { g: p.g, units: p.units ?? null, macros: macrosOf(item.food, p.g) });
+      meal.totals = meal.items.reduce((s, x) => add(s, x.macros), ZERO);
+      kResidual -= item.macros.k - beforeK;
     }
   }
 }
