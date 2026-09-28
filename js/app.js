@@ -556,7 +556,8 @@ function foodPrefsForm(pr, first) {
     <label>Aliments que tu n’aimes pas ou veux éviter (séparés par des virgules)</label>
     <textarea name="dislikes" rows="2" placeholder="ex. saumon, brocoli, thon">${esc(pr.dislikes)}</textarea>
     <label>Repas par jour</label>
-    <select name="meals">${[3, 4, 5].map((n) => `<option value="${n}" ${pr.meals === n ? 'selected' : ''}>${n} repas${n === 3 ? '' : n === 4 ? ' (dont 1 collation)' : ' (dont 2 collations)'}</option>`).join('')}</select>
+    <select name="meals">${[3, 4, 5, 6].map((n) => `<option value="${n}" ${pr.meals === n ? 'selected' : ''}>${n} repas${{3:'',4:' (dont 1 collation)',5:' (dont 2 collations)',6:' (dont 3 collations — recommandé sur une grosse cible)'}[n]}</option>`).join('')}</select>
+    <p class="muted">Sur une grosse cible (prise de masse), plus de repas donne des portions plus normales.</p>
     <label>Budget épicerie</label>
     <select name="budget">${Object.entries(BUDGETS).map(([k, v]) => `<option value="${k}" ${pr.budget === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
     <p class="muted">Le coach IA en tient compte dans ses conseils (ex. privilégier le riz, les œufs, le poulet en gros format plutôt que des produits chers). Le choix précis des aliments selon leur prix n’est pas encore automatique.</p>
@@ -1160,7 +1161,7 @@ acts.aiFillDiet = async (el) => {
     const allergyKeys = Object.keys(ALLERGENS).join('", "');
     const convo = hist.length ? `Voici notre conversation récente sur son régime :\n${hist.map((m) => `${m.r === 'user' ? 'Personne' : 'Coach'} : ${m.t}`).join('\n')}\n\n` : '';
     const reply = await db.askCoach({
-      messages: [{ role: 'user', text: `${convo}${text ? `Elle ajoute maintenant : « ${text} ». ` : ''}Réponds UNIQUEMENT avec un objet JSON, sans texte autour ni bloc de code, exactement sous cette forme : {"diet": "une valeur parmi \\"${dietKeys}\\"", "allergies": ["zéro ou plusieurs valeurs parmi \\"${allergyKeys}\\""], "dislikes": "aliments à éviter séparés par des virgules, en français, ou chaîne vide", "meals": nombre entier 3, 4 ou 5}. Déduis ces valeurs du mieux possible à partir de ce qui précède.` }],
+      messages: [{ role: 'user', text: `${convo}${text ? `Elle ajoute maintenant : « ${text} ». ` : ''}Réponds UNIQUEMENT avec un objet JSON, sans texte autour ni bloc de code, exactement sous cette forme : {"diet": "une valeur parmi \\"${dietKeys}\\"", "allergies": ["zéro ou plusieurs valeurs parmi \\"${allergyKeys}\\""], "dislikes": "aliments à éviter séparés par des virgules, en français, ou chaîne vide", "meals": nombre entier 3, 4, 5 ou 6}. Déduis ces valeurs du mieux possible à partir de ce qui précède.` }],
       context: {},
     });
     let json = reply.trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();
@@ -1170,7 +1171,7 @@ acts.aiFillDiet = async (el) => {
     const wanted = new Set(Array.isArray(parsed.allergies) ? parsed.allergies.filter((a) => ALLERGENS[a]) : []);
     form.querySelectorAll('input[name=allergy]').forEach((c) => { c.checked = wanted.has(c.value); });
     if (typeof parsed.dislikes === 'string') form.dislikes.value = parsed.dislikes.slice(0, 300);
-    if ([3, 4, 5].includes(+parsed.meals)) form.meals.value = String(parsed.meals);
+    if ([3, 4, 5, 6].includes(+parsed.meals)) form.meals.value = String(parsed.meals);
     toast('Préférences remplies par le coach — vérifie puis enregistre.');
     form.scrollIntoView({ behavior: 'smooth' });
   } catch (e) {

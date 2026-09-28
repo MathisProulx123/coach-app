@@ -41,23 +41,23 @@ export const FOODS = [
   // ---------- Glucides ----------
   // Plafonds relevés pour rester précis même sur de grosses cibles (ex. prise de masse à 3500-4000+ kcal).
   F('avoine', 'Flocons d’avoine (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { max: 160, allergens: ['gluten'], kw: ['avoine', 'gruau'], brands: 'Quaker, Nature’s Path' }),
-  F('avoine_sg', 'Flocons d’avoine sans gluten (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { max: 160, kw: ['avoine', 'gruau'], brands: 'Bob’s Red Mill (certifiés sans gluten), Nature’s Path' }),
-  F('pain', 'Pain de blé entier', 'carb', ['dej'], 247, 13, 41, 3.4, { max: 210, allergens: ['gluten'], unit: { n: 'tranche', p: 'tranches', g: 35, whole: true }, kw: ['pain', 'ble'], brands: 'Dempster’s, Bon Matin, Kirkland' }),
-  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28, 0.3, { max: 550, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 123, 2.7, 26, 1, { max: 550, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 31, 0.9, { max: 550, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
-  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { max: 550, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
-  F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20, 0.1, { max: 650, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
-  F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 21, 0.2, { max: 600, kw: ['patate douce'], brands: 'fraîche' }),
-  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21, 1.9, { max: 500, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
+  F('avoine_sg', 'Flocons d’avoine sans gluten (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { max: 120, kw: ['avoine', 'gruau'], brands: 'Bob’s Red Mill (certifiés sans gluten), Nature’s Path' }),
+  F('pain', 'Pain de blé entier', 'carb', ['dej'], 247, 13, 41, 3.4, { max: 105, allergens: ['gluten'], unit: { n: 'tranche', p: 'tranches', g: 35, whole: true }, kw: ['pain', 'ble'], brands: 'Dempster’s, Bon Matin, Kirkland' }),
+  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28, 0.3, { max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 123, 2.7, 26, 1, { max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 31, 0.9, { max: 400, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
+  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { max: 400, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
+  F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20, 0.1, { max: 500, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
+  F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 21, 0.2, { max: 450, kw: ['patate douce'], brands: 'fraîche' }),
+  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21, 1.9, { max: 350, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
 
   // ---------- Lipides ----------
-  F('huile', 'Huile d’olive', 'fat', ['dej', 'din', 'sou'], 884, 0, 0, 100, { max: 30, unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['huile'], brands: 'Bertolli, Filippo Berio, Kirkland' }),
-  F('avocat', 'Avocat', 'fat', ['dej', 'din', 'sou'], 160, 2, 9, 15, { max: 225, unit: { n: 'demi-avocat', p: 'demi-avocats', g: 75, whole: true }, kw: ['avocat'], brands: 'frais' }),
-  F('amandes', 'Amandes', 'fat', ['dej'], 579, 21, 22, 50, { max: 50, allergens: ['noix'], kw: ['amande', 'noix'], brands: 'Blue Diamond, Kirkland, Planters' }),
-  F('grenoble', 'Noix de Grenoble', 'fat', ['dej', 'din', 'sou'], 654, 15, 14, 65, { max: 50, allergens: ['noix'], kw: ['grenoble', 'noix'], brands: 'Kirkland, Planters' }),
-  F('arachide', 'Beurre d’arachide naturel', 'fat', ['dej'], 588, 25, 20, 50, { max: 48, allergens: ['arachide'], unit: { n: 'c. à soupe', p: 'c. à soupe', g: 16 }, kw: ['arachide', 'peanut'], brands: 'Adams, Kraft, Kirkland' }),
-  F('beurre', 'Beurre', 'fat', ['dej', 'din', 'sou'], 717, 0.9, 0.1, 81, { max: 30, allergens: ['lait'], unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['beurre'], brands: 'Lactantia, Beatrice, Kirkland' }),
+  F('huile', 'Huile d’olive', 'fat', ['dej', 'din', 'sou'], 884, 0, 0, 100, { max: 20, unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['huile'], brands: 'Bertolli, Filippo Berio, Kirkland' }),
+  F('avocat', 'Avocat', 'fat', ['dej', 'din', 'sou'], 160, 2, 9, 15, { max: 150, unit: { n: 'demi-avocat', p: 'demi-avocats', g: 75, whole: true }, kw: ['avocat'], brands: 'frais' }),
+  F('amandes', 'Amandes', 'fat', ['dej'], 579, 21, 22, 50, { max: 35, allergens: ['noix'], kw: ['amande', 'noix'], brands: 'Blue Diamond, Kirkland, Planters' }),
+  F('grenoble', 'Noix de Grenoble', 'fat', ['dej', 'din', 'sou'], 654, 15, 14, 65, { max: 35, allergens: ['noix'], kw: ['grenoble', 'noix'], brands: 'Kirkland, Planters' }),
+  F('arachide', 'Beurre d’arachide naturel', 'fat', ['dej'], 588, 25, 20, 50, { max: 32, allergens: ['arachide'], unit: { n: 'c. à soupe', p: 'c. à soupe', g: 16 }, kw: ['arachide', 'peanut'], brands: 'Adams, Kraft, Kirkland' }),
+  F('beurre', 'Beurre', 'fat', ['dej', 'din', 'sou'], 717, 0.9, 0.1, 81, { max: 20, allergens: ['lait'], unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['beurre'], brands: 'Lactantia, Beatrice, Kirkland' }),
 
   // ---------- Fruits ----------
   F('banane', 'Banane', 'fruit', ['dej', 'col'], 89, 1.1, 23, 0.3, { unit: { n: 'banane', p: 'bananes', g: 120, whole: true }, kw: ['banane'], brands: 'fraîche' }),

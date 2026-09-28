@@ -3,13 +3,15 @@
 // donc quand le coach change tes calories après un check-in, tes repas s'ajustent automatiquement.
 import { FOODS, FOOD_BY_ID, allowed, resolveFood } from './foods.js';
 
-export const SLOT_NAMES = { dej: 'Déjeuner', din: 'Dîner', col: 'Collation', col2: 'Collation', sou: 'Souper' };
+export const SLOT_NAMES = { dej: 'Déjeuner', din: 'Dîner', col: 'Collation', col2: 'Collation', col3: 'Collation', sou: 'Souper' };
 
-// [repas, part de la journée]
+// [repas, part de la journée]. Plus de repas = portions plus normales par repas, surtout sur une grosse cible
+// (ex. prise de masse) : mieux vaut manger plus souvent que forcer une quantité énorme dans une seule assiette.
 export const MEAL_LAYOUT = {
   3: [['dej', 0.30], ['din', 0.35], ['sou', 0.35]],
   4: [['dej', 0.27], ['din', 0.30], ['col', 0.13], ['sou', 0.30]],
   5: [['dej', 0.25], ['col', 0.10], ['din', 0.28], ['col2', 0.10], ['sou', 0.27]],
+  6: [['dej', 0.22], ['col', 0.09], ['din', 0.24], ['col2', 0.09], ['sou', 0.24], ['col3', 0.12]],
 };
 // Ce qu'il y a dans chaque repas (les collations sont plus légères)
 const ROLES = {
@@ -18,9 +20,10 @@ const ROLES = {
   sou: ['protein', 'carb', 'veg', 'fat'],
   col: ['protein', 'fruit'],
   col2: ['protein', 'fruit'],
+  col3: ['protein', 'carb', 'fruit'],
 };
-const isSnack = (slot) => slot === 'col' || slot === 'col2';
-const slotKey = (slot) => (slot === 'col2' ? 'col' : slot);
+const isSnack = (slot) => slot === 'col' || slot === 'col2' || slot === 'col3';
+const slotKey = (slot) => (slot === 'col2' || slot === 'col3' ? 'col' : slot);
 export const ROLE_NAMES = { protein: 'Protéines', carb: 'Glucides', fat: 'Lipides', fruit: 'Fruit', veg: 'Légumes' };
 const VEG_GRAMS = 150;
 
@@ -190,13 +193,17 @@ export function computeDay(targets, choices, prefs = {}) {
   const share = (slot) => layout.find(([s]) => s === slot)[1];
 
   const build = (meal, T, keys) => {
+    // Si un aliment choisi a depuis été retiré de la liste (mise à jour de l'app), on l'ignore plutôt que
+    // de faire planter l'affichage : le repas se recalcule avec ce qu'il reste, quitte à être un peu à côté
+    // jusqu'à ce que la personne touche « Autre repas » ou change ses préférences.
     const items = meal.items.map((it) => {
       const food = resolveFood(it.food, it.custom);
+      if (!food) return null;
       let fixed = null;
       if (it.role === 'veg') fixed = VEG_GRAMS;
       if (it.role === 'fruit') fixed = food.unit ? food.unit.g : 100;
       return { role: it.role, food, fixed };
-    });
+    }).filter(Boolean);
     const q = solve(items, T, keys);
     const built = items.map((it, i) => {
       const p = practical(it.food, q[i], it.role);
