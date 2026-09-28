@@ -54,8 +54,10 @@ async function ensureMealPlan() {
 const prefs = () => ({
   allergies: [], diet: 'aucun', dislikes: '', meals: 4, done: false, water: null, weight_unit: 'kg', goal_weight: null, goal_date: '',
   load_units: {}, plate_lb: 45, bar_lb: 45, training_goal_text: '', training_goal_ai: '', training_style: 'hypertrophy',
+  budget: 'normal',
   ...(S.profile?.food_prefs || {}),
 });
+const BUDGETS = { serre: 'Serré (aliments les moins chers possible)', normal: 'Normal', genereux: 'Généreux (peu importe le prix)' };
 const TRAINING_STYLES = {
   strength: 'Force (peu de répétitions)', hypertrophy: 'Hypertrophie (6 à 10 répétitions)', endurance: 'Endurance musculaire (10+ répétitions)',
 };
@@ -555,6 +557,9 @@ function foodPrefsForm(pr, first) {
     <textarea name="dislikes" rows="2" placeholder="ex. saumon, brocoli, thon">${esc(pr.dislikes)}</textarea>
     <label>Repas par jour</label>
     <select name="meals">${[3, 4, 5].map((n) => `<option value="${n}" ${pr.meals === n ? 'selected' : ''}>${n} repas${n === 3 ? '' : n === 4 ? ' (dont 1 collation)' : ' (dont 2 collations)'}</option>`).join('')}</select>
+    <label>Budget épicerie</label>
+    <select name="budget">${Object.entries(BUDGETS).map(([k, v]) => `<option value="${k}" ${pr.budget === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <p class="muted">Le coach IA en tient compte dans ses conseils (ex. privilégier le riz, les œufs, le poulet en gros format plutôt que des produits chers). Le choix précis des aliments selon leur prix n’est pas encore automatique.</p>
     <button class="block" style="margin-top:14px">${first ? 'Créer mon plan de repas' : 'Enregistrer et régénérer mes repas'}</button>
     ${first ? '' : '<button type="button" class="ghost block" style="margin-top:8px" data-act="cancelPrefs">Annuler</button>'}
   </form>`;
@@ -891,7 +896,7 @@ function aiContext() {
     nutrition: {
       cibles_moyennes_semaine: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau },
       cycle_glucidique: { jour_entrainement: dayVariant(pl, 'train'), jour_repos: dayVariant(pl, 'rest'), note: 'Protéines et lipides identiques les deux types de jour ; seuls glucides et calories varient. La personne choisit le type de jour dans l’onglet Repas.' },
-      allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals,
+      allergies: pr.allergies, regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, budget_epicerie: BUDGETS[pr.budget],
       plan_de_repas_jour_entrainement: mealsFor('train'), plan_de_repas_jour_repos: mealsFor('rest'),
     },
     programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => defOf(e).name) })),
@@ -928,6 +933,7 @@ function vCoach() {
       ${S.chatBusy ? '<div class="bubble ai">…</div>' : ''}
     </div>
     <div class="chips">
+      ${canAI() ? '<button type="button" class="ghost small" data-act="buildDiet">🍽️ Construire mon régime avec le coach</button>' : ''}
       ${canAI() && hasPhotos ? '<button type="button" class="ghost small" data-act="askPhotos">📸 Analyser mes photos de progrès</button>' : ''}
       ${CHIPS.map((c) => `<button type="button" class="ghost small" data-act="ask" data-q="${esc(c)}">${esc(c)}</button>`).join('')}
     </div>
@@ -973,6 +979,7 @@ async function ask(q, photos = []) {
 }
 acts.ask = (el) => ask(el.dataset.q);
 acts.askPhotos = () => ask('Analyse l’évolution visible sur mes photos de progrès (silhouette, posture), en plus de mes derniers chiffres.', recentPhotos(2));
+acts.buildDiet = () => ask('Aide-moi à construire mon régime : pose-moi des questions une à la fois sur ce que j’aime manger (au déjeuner, au dîner, au souper, en collation), les quantités qui me conviennent, et mon budget épicerie. Base-toi sur des aliments courants et faciles à trouver, pas des produits de niche, et propose des combinaisons qui se mangent bien ensemble. Commence par ta première question.');
 acts.clearChat = () => { chatSave([]); render(); };
 forms.chat = async (form) => {
   const q = String(new FormData(form).get('q') || '').trim();
@@ -1145,13 +1152,15 @@ acts.askGoal = async (el) => {
 };
 acts.aiFillDiet = async (el) => {
   const text = document.getElementById('ai-diet-text').value.trim();
-  if (!text) return toast('Décris d’abord ton régime idéal dans le champ ci-dessus.');
+  const hist = chatLoad().slice(-16); // la conversation du coach (ex. « Construire mon régime ») compte aussi
+  if (!text && !hist.length) return toast('Décris ton régime dans le champ ci-dessus, ou discute-en d’abord avec le coach (onglet Coach).');
   el.disabled = true; el.textContent = 'Le coach réfléchit…';
   try {
     const dietKeys = Object.keys(DIETS).join('", "');
     const allergyKeys = Object.keys(ALLERGENS).join('", "');
+    const convo = hist.length ? `Voici notre conversation récente sur son régime :\n${hist.map((m) => `${m.r === 'user' ? 'Personne' : 'Coach'} : ${m.t}`).join('\n')}\n\n` : '';
     const reply = await db.askCoach({
-      messages: [{ role: 'user', text: `Une personne décrit le régime qu'elle veut : « ${text} ». Réponds UNIQUEMENT avec un objet JSON, sans texte autour ni bloc de code, exactement sous cette forme : {"diet": "une valeur parmi \\"${dietKeys}\\"", "allergies": ["zéro ou plusieurs valeurs parmi \\"${allergyKeys}\\""], "dislikes": "aliments à éviter séparés par des virgules, en français, ou chaîne vide", "meals": nombre entier 3, 4 ou 5}. Déduis ces valeurs du mieux possible à partir de sa description ; si un régime mentionné correspond à une restriction (ex. végane, sans gluten via allergies), reflète-le du mieux possible avec ces champs.` }],
+      messages: [{ role: 'user', text: `${convo}${text ? `Elle ajoute maintenant : « ${text} ». ` : ''}Réponds UNIQUEMENT avec un objet JSON, sans texte autour ni bloc de code, exactement sous cette forme : {"diet": "une valeur parmi \\"${dietKeys}\\"", "allergies": ["zéro ou plusieurs valeurs parmi \\"${allergyKeys}\\""], "dislikes": "aliments à éviter séparés par des virgules, en français, ou chaîne vide", "meals": nombre entier 3, 4 ou 5}. Déduis ces valeurs du mieux possible à partir de ce qui précède.` }],
       context: {},
     });
     let json = reply.trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();
@@ -1227,7 +1236,7 @@ forms.profile = async (form) => {
 forms.food = async (form) => {
   const fd = new FormData(form);
   // On repart des préférences actuelles pour ne pas effacer l'eau, l'unité de poids ou l'objectif chiffré.
-  const pr = { ...prefs(), allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), done: true };
+  const pr = { ...prefs(), allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), budget: fd.get('budget') || 'normal', done: true };
   try {
     await db.saveProfile({ ...S.profile, food_prefs: pr });
     S.profile = { ...S.profile, food_prefs: pr };
