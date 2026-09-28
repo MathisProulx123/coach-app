@@ -6,6 +6,7 @@ import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, DIETS, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
 const S = {
   me: null, profile: null, plan: null, workouts: [], daily: [], checkins: [], other: null,
@@ -549,6 +550,14 @@ function foodPrefsForm(pr, first) {
   <form data-form="food" class="card">
     <h2>${first ? 'Ton plan de repas' : 'Mes préférences alimentaires'}</h2>
     <p class="muted">Réponds à ces questions pour que je crée des repas qui te conviennent (ou laisse le coach les remplir ci-dessus). Tu pourras les changer à tout moment.</p>
+    ${foodFields(pr)}
+    <button class="block" style="margin-top:14px">${first ? 'Créer mon plan de repas' : 'Enregistrer et régénérer mes repas'}</button>
+    ${first ? '' : '<button type="button" class="ghost block" style="margin-top:8px" data-act="cancelPrefs">Annuler</button>'}
+  </form>`;
+}
+// Champs des préférences alimentaires (formulaire « Repas » et récapitulatif de l'onboarding).
+function foodFields(pr) {
+  return `
     <label>Allergies ou intolérances</label>
     <div class="checks">${Object.entries(ALLERGENS).map(([k, v]) => `<label class="check"><input type="checkbox" name="allergy" value="${k}" ${pr.allergies.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
     <label>Régime</label>
@@ -560,11 +569,11 @@ function foodPrefsForm(pr, first) {
     <p class="muted">Sur une grosse cible (prise de masse), plus de repas donne des portions plus normales.</p>
     <label>Budget épicerie</label>
     <select name="budget">${Object.entries(BUDGETS).map(([k, v]) => `<option value="${k}" ${pr.budget === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-    <p class="muted">Le coach IA en tient compte dans ses conseils (ex. privilégier le riz, les œufs, le poulet en gros format plutôt que des produits chers). Le choix précis des aliments selon leur prix n’est pas encore automatique.</p>
-    <button class="block" style="margin-top:14px">${first ? 'Créer mon plan de repas' : 'Enregistrer et régénérer mes repas'}</button>
-    ${first ? '' : '<button type="button" class="ghost block" style="margin-top:8px" data-act="cancelPrefs">Annuler</button>'}
-  </form>`;
+    <p class="muted">Le coach IA en tient compte dans ses conseils (ex. privilégier le riz, les œufs, le poulet en gros format plutôt que des produits chers). Le choix précis des aliments selon leur prix n’est pas encore automatique.</p>`;
 }
+const readFoodFields = (fd) => ({
+  allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), budget: fd.get('budget') || 'normal',
+});
 
 function vFood() {
   const pl = S.plan, pr = prefs();
@@ -993,11 +1002,11 @@ forms.chat = async (form) => {
   if (q && !S.chatBusy) await ask(q);
 };
 
-function profileForm(p = {}, label = 'Enregistrer') {
+// form/extra : le récapitulatif de l'onboarding réutilise ce formulaire sous un autre nom, avec les champs alimentaires en plus.
+function profileForm(p = {}, label = 'Enregistrer', pr = prefs(), { form = 'profile', extra = '', ai = true } = {}) {
   const opt = (v, t, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
-  const pr = prefs();
   return `
-  <form data-form="profile" class="card">
+  <form data-form="${form}" class="card">
     <label>Prénom</label><input name="name" required value="${esc(p.name ?? '')}">
     <div class="grid2">
       <div><label>Sexe</label><select name="sex">${opt('homme', 'Homme', p.sex)}${opt('femme', 'Femme', p.sex)}</select></div>
@@ -1020,13 +1029,14 @@ function profileForm(p = {}, label = 'Enregistrer') {
     <label>Tu cherches plutôt…</label>
     <select name="training_style">${Object.entries(TRAINING_STYLES).map(([k, v]) => opt(k, v, pr.training_style)).join('')}</select>
     <p class="muted">Le type choisi change les fourchettes de répétitions de tout ton programme (ex. squat en 3–5 pour la force, 9–14 pour l’endurance). Le coach IA lit aussi ce que tu as écrit ci-dessus pour mieux te conseiller.</p>
-    ${canAI() ? `<button type="button" class="ghost block" style="margin-top:8px" data-act="askGoal">Demander l’avis du coach IA sur mon but</button>
+    ${canAI() && ai ? `<button type="button" class="ghost block" style="margin-top:8px" data-act="askGoal">Demander l’avis du coach IA sur mon but</button>
     ${pr.training_goal_ai ? `<p class="msg"><span>💬</span><span>${esc(pr.training_goal_ai)}</span></p>` : ''}` : ''}
     <label>Activité hors entraînement</label>
     <select name="activity">${opt('low', 'Surtout assis', p.activity)}${opt('medium', 'Assez actif', p.activity ?? 'medium')}${opt('high', 'Très actif / travail physique', p.activity)}</select>
     <label>Blessures ou exercices à éviter (optionnel)</label>
     <textarea name="limitations" rows="2" placeholder="ex. genou droit fragile, pas de barre au-dessus de la tête">${esc(p.limitations ?? '')}</textarea>
     <label><input type="checkbox" name="share_photos" ${p.share_photos === false ? '' : 'checked'}> Partager mes photos avec mon ami</label>
+    ${extra}
     <button class="block" style="margin-top:14px">${label}</button>
   </form>`;
 }
@@ -1132,9 +1142,113 @@ function renderAuth() {
     <p class="center"><a href="#" data-act="toggleAuth">${up ? 'J’ai déjà un compte' : 'Créer un compte'}</a></p>
   </form></div>`;
 }
+// ----- Premier accès : conversation avec le coach (ou formulaire classique) -----
+// La conversation et le brouillon sont gardés sur l'appareil, pour reprendre là où on en était après un rechargement.
+const onbKey = () => `coach_onb_${S.me.id}`;
+function onbLoad() { try { return JSON.parse(localStorage.getItem(onbKey()) || 'null'); } catch { return null; } }
+function onbSave() { try { localStorage.setItem(onbKey(), JSON.stringify(S.onb)); } catch { /* stockage indisponible */ } }
+const onbAvailable = () => canAI() || db.DEMO; // démo : faux coach scripté, pour tester le parcours sans IA
+const onbNew = () => ({ hist: [{ r: 'ai', t: FIRST_MESSAGE }], draft: {}, done: false, mode: onbAvailable() ? 'chat' : 'form' });
+
 function renderOnboarding() {
-  root.innerHTML = `<div class="auth">${brandHtml('Bienvenue 👋')}<h2>Créons ton plan</h2><p class="muted">Quelques infos pour créer ton plan de départ. Tu pourras tout modifier ensuite.</p>${profileForm({}, 'Créer mon plan')}</div>`;
+  if (!S.onb) S.onb = onbLoad() || onbNew();
+  const o = S.onb;
+  if (!onbAvailable()) o.mode = 'form';
+  const body = o.mode === 'recap' ? onbRecapHtml(o) : o.mode === 'chat' ? onbChatHtml(o)
+    : `<h2>Créons ton plan</h2><p class="muted">Quelques infos pour créer ton plan de départ. Tu pourras tout modifier ensuite.</p>${profileForm({}, 'Créer mon plan', prefs(), { ai: false })}
+       ${onbAvailable() ? '<button type="button" class="ghost block" data-act="onbMode" data-arg="chat">Je préfère discuter avec le coach</button>' : ''}`;
+  root.innerHTML = `<div class="auth onboard">${brandHtml('Bienvenue 👋')}${body}</div>`;
+  if (o.mode === 'chat') { const c = root.querySelector('.chat'); if (c) c.scrollTop = c.scrollHeight; root.querySelector('textarea[name=q]')?.focus(); }
 }
+function onbChatHtml(o) {
+  const total = Object.keys(ESSENTIALS).length, known = total - missing(o.draft).length;
+  return `
+  <section class="card">
+    <div class="row between"><h2>Faisons connaissance</h2><span class="muted">${known}/${total} infos clés</span></div>
+    ${bar(known, total)}
+    <div class="chat">
+      ${o.hist.map((m) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>`).join('')}
+      ${o.busy ? '<div class="bubble ai">…</div>' : ''}
+    </div>
+    <form data-form="onbChat" class="chatform">
+      <textarea name="q" rows="2" placeholder="Ta réponse…" required ${o.busy ? 'disabled' : ''}></textarea>
+      <button ${o.busy ? 'disabled' : ''}>Envoyer</button>
+    </form>
+    ${db.DEMO ? '<p class="muted" style="margin-top:10px">Mode démo : coach scripté (sans IA), pour tester le parcours.</p>' : ''}
+  </section>
+  <button type="button" class="block ${o.done ? '' : 'ghost'}" data-act="onbMode" data-arg="recap">${o.done ? 'Voir mon récapitulatif et créer mon plan' : 'Passer au récapitulatif'}</button>
+  <button type="button" class="ghost block" data-act="onbMode" data-arg="form">Je préfère remplir un formulaire</button>
+  ${o.hist.length > 1 ? '<p class="center"><a href="#" data-act="onbRestart">Recommencer la discussion</a></p>' : ''}`;
+}
+function onbRecapHtml(o) {
+  const d = o.draft;
+  const unit = d.weight_unit || 'kg';
+  const p = {
+    name: d.name, sex: d.sex, birth_year: d.birth_year, height_cm: d.height_cm, start_weight: d.weight_kg, goal: d.goal,
+    days_per_week: d.days_per_week, equipment: d.equipment, activity: d.activity, limitations: d.limitations, food_prefs: { weight_unit: unit },
+  };
+  const pr = {
+    ...prefs(), weight_unit: unit, goal_weight: d.goal_weight_kg ?? null, goal_date: d.goal_date || '', training_goal_text: d.training_goal_text || '',
+    training_style: d.training_style || 'hypertrophy', diet: d.diet || 'aucun', allergies: d.allergies || [], dislikes: d.dislikes || '',
+    meals: d.meals || 4, budget: d.budget || 'normal',
+  };
+  const minor = d.birth_year && new Date().getFullYear() - d.birth_year < 18;
+  const miss = missing(d);
+  return `
+  <h2>Ton récapitulatif</h2>
+  <p class="muted">Voici ce que le coach a compris. Vérifie, corrige au besoin, puis crée ton plan. Tu pourras tout changer plus tard.</p>
+  ${d.caution || minor ? `<section class="card warn"><h2>⚠️ À lire avant de commencer</h2>
+    ${d.caution ? `<p>${esc(d.caution)}</p>` : ''}
+    ${minor ? '<p>Tu as moins de 18 ans : parles-en à un parent et à un professionnel de la santé avant de changer ton alimentation.</p>' : ''}
+    <p class="muted">L’application ne remplace pas un avis médical. En cas de doute, consulte un professionnel de la santé.</p></section>` : ''}
+  ${miss.length ? `<p class="msg"><span>✏️</span><span>À compléter : ${miss.map((k) => ESSENTIALS[k]).join(', ')}.</span></p>` : ''}
+  ${profileForm(p, 'Créer mon plan', pr, { form: 'onboard', ai: false, extra: `<h2 style="margin-top:24px">Alimentation</h2>${foodFields(pr)}` })}
+  <button type="button" class="ghost block" data-act="onbMode" data-arg="chat">Revenir à la discussion</button>`;
+}
+acts.onbMode = (el) => { S.onb.mode = el.dataset.arg; onbSave(); renderOnboarding(); window.scrollTo(0, 0); };
+acts.onbRestart = (el, e) => {
+  e.preventDefault();
+  if (!confirm('Recommencer la discussion depuis le début ?')) return;
+  S.onb = onbNew(); onbSave(); renderOnboarding();
+};
+forms.onbChat = async (form) => {
+  const o = S.onb;
+  const q = String(new FormData(form).get('q') || '').trim();
+  if (!q || o.busy) return;
+  o.hist.push({ r: 'user', t: q });
+  o.busy = true;
+  renderOnboarding();
+  try {
+    const res = db.DEMO
+      ? await new Promise((ok) => setTimeout(() => ok(mockTurn(o.hist, o.draft, q)), 500))
+      : parseReply(await db.askCoach(onboardPayload(o.hist, o.draft)));
+    o.draft = mergeDraft(o.draft, res.draft);
+    o.done = res.done;
+    o.hist.push({ r: 'ai', t: res.reply });
+  } catch (e) {
+    const why = /quota/i.test(e.message) ? 'le coach a atteint la limite gratuite de Google pour le moment'
+      : e instanceof SyntaxError ? 'je me suis mélangé dans ma réponse' : e.message;
+    // Message d'erreur affiché mais jamais renvoyé à l'IA (err: true). La réponse de la personne est gardée.
+    o.hist.push({ r: 'ai', t: `Oups, ${why}. Renvoie ton message dans un instant, ou passe au récapitulatif pour remplir le reste toi-même.`, err: true });
+  }
+  o.busy = false;
+  onbSave();
+  renderOnboarding();
+};
+forms.onboard = async (form) => {
+  const fd = new FormData(form);
+  const unit = S.onb?.draft?.weight_unit || 'kg';
+  const p = readProfile(Object.fromEntries(fd), null, prefs(), unit);
+  p.food_prefs = { ...p.food_prefs, ...readFoodFields(fd), weight_unit: unit, done: true };
+  const btn = form.querySelector('button:not([type=button])');
+  btn.disabled = true; btn.textContent = 'Création de ton plan…';
+  try {
+    await createStart(p);
+    try { localStorage.removeItem(onbKey()); } catch { /* rien à nettoyer */ }
+    S.onb = null;
+    toast('Ton plan est prêt 🎉');
+  } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = 'Créer mon plan'; }
+};
 async function hydratePhotos() {
   for (const img of document.querySelectorAll('img[data-path]')) {
     const u = await db.photoUrl(img.dataset.path);
@@ -1166,7 +1280,7 @@ acts.who = (el) => { S.who = el.dataset.arg; render(); };
 acts.seeOther = () => { S.who = 'other'; };
 acts.slot = (el) => { S.slot = el.dataset.arg; render(); };
 acts.toggleAuth = (el, e) => { e.preventDefault(); S.authMode = S.authMode === 'in' ? 'up' : 'in'; render(); };
-acts.logout = async () => { await db.signOut(); S.me = null; S.profile = null; render(); };
+acts.logout = async () => { await db.signOut(); S.me = null; S.profile = null; S.onb = null; render(); };
 acts.resetDemo = () => { db.resetDemo(); location.hash = '#/home'; location.reload(); };
 acts.askAI = async (el) => {
   el.disabled = true; el.textContent = 'Le coach réfléchit…';
@@ -1240,35 +1354,45 @@ forms.auth = async (form) => {
   } catch (e) { toast(e.message); }
 };
 
-forms.profile = async (form) => {
-  const fd = Object.fromEntries(new FormData(form));
-  const old = S.profile;
+// Lit le formulaire de profil (Réglages, premier accès ou récapitulatif de l'onboarding). unit = unité des poids tapés.
+function readProfile(fd, old, oldPr, unit = wUnit(old)) {
   const p = {
     ...(old || {}),
     id: S.me.id, name: fd.name.trim(), sex: fd.sex, birth_year: +fd.birth_year, height_cm: +fd.height_cm,
-    start_weight: toKg(+fd.start_weight, wUnit(old)), goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
+    start_weight: toKg(+fd.start_weight, unit), goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
-  const oldPr = prefs();
   const goalText = String(fd.training_goal_text || '').trim().slice(0, 600);
   p.food_prefs = {
-    ...oldPr, goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, wUnit(old)) : null, goal_date: fd.goal_date || '',
+    ...oldPr, goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, unit) : null, goal_date: fd.goal_date || '',
     training_goal_text: goalText, training_style: fd.training_style,
     training_goal_ai: goalText === oldPr.training_goal_text ? oldPr.training_goal_ai : '', // texte changé : l'ancien avis n'est plus à jour
   };
+  return p;
+}
+// Nouveau compte : crée le profil et le plan de départ (avec les repas si les préférences alimentaires sont déjà connues).
+async function createStart(p) {
+  await db.saveProfile(p);
+  const plan = {
+    user_id: S.me.id, ...calcTargets(p, p.start_weight), program: buildProgram(p.days_per_week, p.equipment, p.food_prefs.training_style),
+    deload: false, hold: false, meal_plan: null,
+    reasons: [{ icon: '🚀', text: 'Plan de départ créé selon ton profil. Fais ton premier check-in pour lancer le suivi.' }],
+  };
+  if (p.food_prefs.done) plan.meal_plan = buildChoices(p.food_prefs, Date.now(), plan);
+  await db.savePlan(plan);
+  await refresh('home');
+}
+
+forms.profile = async (form) => {
+  const fd = Object.fromEntries(new FormData(form));
+  const old = S.profile;
+  const oldPr = prefs();
+  const p = readProfile(fd, old, oldPr);
   const programChanged = !!old && (old.days_per_week !== p.days_per_week || old.equipment !== p.equipment || oldPr.training_style !== p.food_prefs.training_style);
   if (programChanged && !confirm('Changer les jours, le matériel ou le type d’entraînement remplace ton programme actuel, y compris tes modifications. Continuer ?')) return;
   try {
+    if (!old) return await createStart(p);
     await db.saveProfile(p);
-    if (!old) {
-      await db.savePlan({
-        user_id: S.me.id, ...calcTargets(p, p.start_weight), program: buildProgram(p.days_per_week, p.equipment, p.food_prefs.training_style),
-        deload: false, hold: false, meal_plan: null,
-        reasons: [{ icon: '🚀', text: 'Plan de départ créé selon ton profil. Fais ton premier check-in pour lancer le suivi.' }],
-      });
-      await refresh('home');
-      return;
-    }
     S.profile = p;
     const targetsChanged = old.goal !== p.goal || old.activity !== p.activity;
     if (programChanged || targetsChanged) {
@@ -1285,7 +1409,7 @@ forms.profile = async (form) => {
 forms.food = async (form) => {
   const fd = new FormData(form);
   // On repart des préférences actuelles pour ne pas effacer l'eau, l'unité de poids ou l'objectif chiffré.
-  const pr = { ...prefs(), allergies: fd.getAll('allergy'), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), budget: fd.get('budget') || 'normal', done: true };
+  const pr = { ...prefs(), ...readFoodFields(fd), done: true };
   try {
     await db.saveProfile({ ...S.profile, food_prefs: pr });
     S.profile = { ...S.profile, food_prefs: pr };
@@ -1382,6 +1506,8 @@ function bindEvents(el) {
   });
   el.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tap[data-act]')) { e.preventDefault(); e.target.click(); }
+    // Discussion : Entrée envoie, Maj+Entrée va à la ligne
+    if (e.key === 'Enter' && !e.shiftKey && e.target.matches('.chatform textarea')) { e.preventDefault(); e.target.form.requestSubmit(); }
   });
   el.addEventListener('change', (e) => {
     if (e.target.dataset.edit && S.draft) return editField(e.target);

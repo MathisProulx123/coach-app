@@ -197,3 +197,10 @@ input.mini { width: 58px; padding: 6px; text-align: center; }
   padding: 14px; margin: 4px 0 6px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-strong);
   user-select: all;
 }
+.card.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 6%, var(--card)); }
+.onboard .chat { max-height: 52vh; overflow-y: auto; padding-right: 2px; }
+.onboard { padding-top: calc(3vh + env(safe-area-inset-top)); }
+.onboard .brand { margin-bottom: 14px; }
+.onboard .brand .logo { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 8px; }
+.onboard .brand .logo svg { width: 24px; height: 24px; }
+.onboard .brand h1 { font-size: 22px; }

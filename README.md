@@ -65,6 +65,12 @@ Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_0
 
 `supabase/migration_004.sql` rend chaque compte privé : on ne voit plus que ses propres données et celles des amis reliés. Vos 2 comptes actuels sont reliés automatiquement (seulement s'il y a au plus 2 profils), donc rien ne change pour vous. Un nouvel utilisateur se relie à un ami dans **Réglages → Partage avec un ami** (code d'invitation valide 7 jours). **À appliquer avant d'ouvrir les inscriptions.** En cas de problème, `migration_004_retour.sql` remet les anciennes règles sans rien effacer.
 
+## Accueil d'un nouvel utilisateur (onboarding avec le coach IA)
+
+À la création d'un compte, le coach IA fait connaissance par une courte discussion : prénom et objectif, sexe, âge, taille et poids (livres acceptées), jours et matériel, activité et blessures, puis alimentation (régime, allergies, aliments détestés, repas par jour, budget). Il remplit un **brouillon** ; la personne vérifie et corrige tout dans un **récapitulatif**, puis « Créer mon plan » crée d'un coup le profil, le programme, les cibles et le plan de repas. Un mineur ou une mention de grossesse, de maladie ou de trouble alimentaire affiche un avertissement recommandant un professionnel de la santé.
+
+Toujours disponible : « Je préfère remplir un formulaire » (l'ancien formulaire). Sans coach IA activé, c'est ce formulaire qui s'affiche. En mode démo, un faux coach scripté (sans IA) permet de tester le parcours. La logique est dans `js/onboarding.js`. Demande la fonction `coach-ai` à jour (option `format: 'json'`), mais marche aussi avec l'ancienne.
+
 ## Semaines personnelles
 
 La première semaine de chacun commence le jour de son tout premier check-in (pas forcément un lundi) ; les semaines suivantes s'enchaînent tous les 7 jours à partir de là. Chaque personne a son propre point de départ. Si un premier check-in a été fait par erreur un mauvais jour, supprime cette ligne dans **Table Editor → checkins** et refais le check-in : le bon jour deviendra le nouveau point de départ.
