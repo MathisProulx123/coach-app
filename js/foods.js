@@ -31,15 +31,12 @@ export const FOODS = [
   F('thon', 'Thon en conserve (eau, égoutté)', 'protein', ['din', 'sou'], 116, 26, 0, 1, { max: 200, animal: 'fish', allergens: ['poisson'], kw: ['thon', 'poisson'], brands: 'Clover Leaf, Bumble Bee, Kirkland' }),
   F('crevettes', 'Crevettes cuites', 'protein', ['din', 'sou'], 99, 24, 0.2, 0.3, { max: 250, animal: 'fish', allergens: ['crustaces'], kw: ['crevette', 'fruits de mer'], brands: 'surgelées décortiquées (ex. Kirkland, Irresistibles)' }),
   F('oeufs', 'Œufs entiers', 'protein', ['dej', 'din', 'sou'], 143, 12.6, 0.7, 9.5, { max: 250, animal: 'egg', allergens: ['oeuf'], unit: { n: 'œuf', p: 'œufs', g: 50, whole: true }, kw: ['oeuf'], brands: 'Burnbrae Farms, Nutri, œufs de catégorie A' }),
-  F('blancs', 'Blancs d’œufs liquides', 'protein', ['dej'], 52, 11, 0.7, 0.2, { max: 300, animal: 'egg', allergens: ['oeuf'], kw: ['oeuf'], brands: 'Burnbrae Farms, Naturegg' }),
   F('yogourt', 'Yogourt grec nature 0 %', 'protein', ['dej', 'col'], 59, 10, 3.6, 0.4, { max: 400, animal: 'dairy', allergens: ['lait'], kw: ['yogourt', 'yaourt', 'yogurt'], brands: 'Oikos, Iögo, Liberté, Astro' }),
-  F('cottage', 'Fromage cottage 1 %', 'protein', ['dej', 'col'], 72, 12, 2.7, 1, { max: 300, animal: 'dairy', allergens: ['lait'], kw: ['cottage', 'fromage'], brands: 'Liberté, Sealtest, Lactantia' }),
   F('whey', 'Poudre de protéines (whey)', 'protein', ['dej', 'col'], 400, 80, 10, 5, { max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
   F('vegprot', 'Poudre de protéines végétales (pois/riz)', 'protein', ['dej', 'col'], 380, 75, 8, 6, { max: 60, supplement: true, unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['poudre', 'proteine', 'vegetale'], brands: 'Vega Sport, Sunwarrior, Garden of Life' }),
   F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
-  F('tempeh', 'Tempeh', 'protein', ['din', 'sou'], 192, 20, 8, 11, { max: 200, allergens: ['soya'], kw: ['tempeh', 'soya'], brands: 'Lightlife' }),
-  F('edamame', 'Edamames (fèves de soya)', 'protein', ['din', 'sou', 'col'], 121, 12, 9, 5, { max: 200, allergens: ['soya'], kw: ['edamame', 'soya'], brands: 'surgelés (ex. Kirkland, Irresistibles)' }),
   F('lentilles', 'Lentilles cuites', 'protein', ['din', 'sou'], 116, 9, 20, 0.4, { max: 200, kw: ['lentille', 'legumineuse'], brands: 'en conserve (ex. Unico, Kirkland) ou sèches' }),
+  F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 127, 8.7, 22.8, 0.5, { max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve (ex. Unico, Kirkland, Irresistibles)' }),
 
   // ---------- Glucides ----------
   // Plafonds relevés pour rester précis même sur de grosses cibles (ex. prise de masse à 3500-4000+ kcal).
@@ -60,7 +57,7 @@ export const FOODS = [
   F('amandes', 'Amandes', 'fat', ['dej'], 579, 21, 22, 50, { max: 50, allergens: ['noix'], kw: ['amande', 'noix'], brands: 'Blue Diamond, Kirkland, Planters' }),
   F('grenoble', 'Noix de Grenoble', 'fat', ['dej', 'din', 'sou'], 654, 15, 14, 65, { max: 50, allergens: ['noix'], kw: ['grenoble', 'noix'], brands: 'Kirkland, Planters' }),
   F('arachide', 'Beurre d’arachide naturel', 'fat', ['dej'], 588, 25, 20, 50, { max: 48, allergens: ['arachide'], unit: { n: 'c. à soupe', p: 'c. à soupe', g: 16 }, kw: ['arachide', 'peanut'], brands: 'Adams, Kraft, Kirkland' }),
-  F('graines', 'Graines de tournesol', 'fat', ['dej', 'din', 'sou'], 584, 21, 20, 51, { max: 45, kw: ['graine', 'tournesol'], brands: 'Kirkland, Sunrise' }),
+  F('beurre', 'Beurre', 'fat', ['dej', 'din', 'sou'], 717, 0.9, 0.1, 81, { max: 30, allergens: ['lait'], unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['beurre'], brands: 'Lactantia, Beatrice, Kirkland' }),
 
   // ---------- Fruits ----------
   F('banane', 'Banane', 'fruit', ['dej', 'col'], 89, 1.1, 23, 0.3, { unit: { n: 'banane', p: 'bananes', g: 120, whole: true }, kw: ['banane'], brands: 'fraîche' }),
