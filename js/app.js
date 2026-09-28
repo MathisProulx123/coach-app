@@ -10,7 +10,7 @@ import { ACTIONS_DOC, splitActions, planActions, carbsForCalories } from './acti
 import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
 const S = {
-  me: null, profile: null, plan: null, workouts: [], daily: [], checkins: [], other: null,
+  me: null, profile: null, plan: null, workouts: [], daily: [], checkins: [], others: [],
   view: 'home', dayIdx: null, who: 'me', slot: 'front', authMode: 'in', editPrefs: false, chatBusy: false,
 };
 const root = document.getElementById('app');
@@ -27,14 +27,16 @@ async function loadMine() {
   ]);
   await ensureMealPlan();
 }
-async function loadOther() {
-  const others = await db.listPartners(S.me.id);
-  if (!others.length) { S.other = null; return; }
-  const p = others[0];
-  const [plan, workouts, daily, checkins] = await Promise.all([
-    db.getPlan(p.id), db.listWorkouts(p.id), db.listDaily(p.id), db.listCheckins(p.id),
-  ]);
-  S.other = { profile: p, plan, workouts, daily, checkins };
+// Les amis reliés (voir « Partage avec un ami » dans les Réglages), triés par prénom.
+async function loadOthers() {
+  const partners = (await db.listPartners(S.me.id)).sort((a, b) => a.name.localeCompare(b.name, 'fr')).slice(0, 12);
+  S.others = await Promise.all(partners.map(async (p) => {
+    const [plan, workouts, daily, checkins] = await Promise.all([
+      db.getPlan(p.id), db.listWorkouts(p.id), db.listDaily(p.id), db.listCheckins(p.id),
+    ]);
+    return { profile: p, plan, workouts, daily, checkins };
+  }));
+  if (S.who !== 'me' && !S.others.some((o) => o.profile.id === S.who)) S.who = 'me';
 }
 // Enregistre une nouvelle version du plan en reprenant l'actuel + les changements
 async function savePlan(changes = {}) {
@@ -254,7 +256,6 @@ function vHome() {
   const log = S.daily.find((d) => d.date === today()) || {};
   const last = S.checkins[S.checkins.length - 1];
   const msgs = (last?.coach?.messages) || plan.reasons || [];
-  const o = S.other, os = o ? statsOf(o) : null;
   return `
   <section class="card">
     <h2>Salut ${esc(p.name)} 👋</h2>
@@ -278,16 +279,19 @@ function vHome() {
   </section>
   ${goalCardHtml()}
   ${msgs.length ? `<section class="card"><h2>Le coach</h2>${msgs.map((m) => `<div class="msg"><span>${m.icon}</span><span>${esc(m.text)}</span></div>`).join('')}</section>` : ''}
+  ${S.others.length ? S.others.map((o) => { const os = statsOf(o); return `
   <section class="card">
-    <h2>${o ? esc(o.profile.name) : 'Ton ami'}</h2>
-    ${o
-      ? `<div class="grid4"><div class="stat"><b>${os.week}</b><span>séances / sem.</span></div>
-         <div class="stat"><b>${os.change > 0 ? '+' : ''}${fmtWeight(os.change, wUnit(o.profile))}</b><span>${wUnit(o.profile)}</span></div>
-         <div class="stat"><b>${os.streak}</b><span>sem. d’affilée</span></div>
-         <div class="stat"><b>${os.adh ?? '–'}${os.adh === null ? '' : '%'}</b><span>régularité</span></div></div>
-         <a class="btn ghost block" style="margin-top:10px" href="#/progress" data-act="seeOther">Voir son progrès</a>`
-      : '<p class="muted">Invite un ami pour suivre vos progrès ensemble.</p><a class="btn ghost block" href="#/settings">Inviter un ami</a>'}
-  </section>`;
+    <h2>${esc(o.profile.name)}</h2>
+    <div class="grid4"><div class="stat"><b>${os.week}</b><span>séances / sem.</span></div>
+      <div class="stat"><b>${os.change > 0 ? '+' : ''}${fmtWeight(os.change, wUnit(o.profile))}</b><span>${wUnit(o.profile)}</span></div>
+      <div class="stat"><b>${os.streak}</b><span>sem. d’affilée</span></div>
+      <div class="stat"><b>${os.adh ?? '–'}${os.adh === null ? '' : '%'}</b><span>régularité</span></div></div>
+    <a class="btn ghost block" style="margin-top:10px" href="#/progress" data-act="seeOther" data-arg="${esc(o.profile.id)}">Voir son progrès</a>
+  </section>`; }).join('') : `
+  <section class="card">
+    <h2>Tes amis</h2>
+    <p class="muted">Invite un ami pour suivre vos progrès ensemble.</p><a class="btn ghost block" href="#/settings">Inviter un ami</a>
+  </section>`}`;
 }
 
 function vTrain() {
@@ -850,8 +854,9 @@ function vCheckin() {
 }
 
 function vProgress() {
-  const mine = S.who === 'me' || !S.other;
-  const d = mine ? { profile: S.profile, checkins: S.checkins, workouts: S.workouts } : S.other;
+  const friend = S.others.find((o) => o.profile.id === S.who);
+  const mine = !friend;
+  const d = mine ? { profile: S.profile, checkins: S.checkins, workouts: S.workouts } : friend;
   const st = statsOf(d);
   const pts = d.checkins.map((c) => ({ d: c.week_start, y: c.weight }));
   const withPhotos = d.checkins.filter((c) => c.photos && c.photos[S.slot]);
@@ -861,7 +866,7 @@ function vProgress() {
   return `
   <div class="tabs">
     <button class="${mine ? 'on' : ''}" data-act="who" data-arg="me">Moi</button>
-    ${S.other ? `<button class="${!mine ? 'on' : ''}" data-act="who" data-arg="other">${esc(S.other.profile.name)}</button>` : ''}
+    ${S.others.map((o) => `<button class="${friend === o ? 'on' : ''}" data-act="who" data-arg="${esc(o.profile.id)}">${esc(o.profile.name)}</button>`).join('')}
   </div>
   <section class="card">
     <h2>${esc(d.profile.name)} · ${GOALS[d.profile.goal]}</h2>
@@ -1192,7 +1197,7 @@ function profileForm(p = {}, label = 'Enregistrer', pr = prefs(), { form = 'prof
     <select name="activity">${opt('low', 'Surtout assis', p.activity)}${opt('medium', 'Assez actif', p.activity ?? 'medium')}${opt('high', 'Très actif / travail physique', p.activity)}</select>
     <label>Blessures ou exercices à éviter (optionnel)</label>
     <textarea name="limitations" rows="2" placeholder="ex. genou droit fragile, pas de barre au-dessus de la tête">${esc(p.limitations ?? '')}</textarea>
-    <label><input type="checkbox" name="share_photos" ${p.share_photos === false ? '' : 'checked'}> Partager mes photos avec mon ami</label>
+    <label><input type="checkbox" name="share_photos" ${p.share_photos === false ? '' : 'checked'}> Partager mes photos avec mes amis</label>
     ${extra}
     <button class="block" style="margin-top:14px">${label}</button>
   </form>`;
@@ -1221,28 +1226,27 @@ function vSettings() {
   </section>`;
 }
 function friendCardHtml() {
-  const o = S.other;
   return `
   <section class="card">
-    <h2>Partage avec un ami</h2>
-    ${o
-      ? `<p>Tu partages ton progrès avec <b>${esc(o.profile.name)}</b>, et lui ou elle avec toi.</p>
-         <button type="button" class="ghost block" data-act="removePartner">Arrêter de partager</button>`
-      : `<p class="muted">Vos données restent privées. Avec un ami relié, chacun voit le progrès de l’autre (séances, poids, et photos si tu les partages).</p>
-         ${S.invite ? `<p class="invite-code">${esc(S.invite)}</p><p class="muted center">Donne ce code à ton ami (valide 7 jours).</p>`
-           : '<button type="button" class="block" data-act="createInvite">Créer un code d’invitation</button>'}
-         <form data-form="joinFriend" class="row" style="margin-top:12px">
-           <input name="code" placeholder="J’ai reçu un code" autocomplete="off" required>
-           <button class="ghost">Valider</button>
-         </form>`}
+    <h2>Partage avec des amis</h2>
+    <p class="muted">Tes données restent privées. Avec un ami relié, chacun voit le progrès de l’autre (séances, poids, et photos si tu les partages).</p>
+    ${S.others.map((o) => `<div class="row between friend-row"><b>${esc(o.profile.name)}</b>
+      <button type="button" class="ghost small" data-act="removePartner" data-arg="${esc(o.profile.id)}">Arrêter de partager</button></div>`).join('')}
+    ${S.invite ? `<p class="invite-code">${esc(S.invite)}</p><p class="muted center">Donne ce code à ton ami (valide 7 jours, une seule fois).</p>`
+      : `<button type="button" class="block" style="margin-top:10px" data-act="createInvite">${S.others.length ? 'Inviter un autre ami' : 'Créer un code d’invitation'}</button>`}
+    <form data-form="joinFriend" class="row" style="margin-top:12px">
+      <input name="code" placeholder="J’ai reçu un code" autocomplete="off" required>
+      <button class="ghost">Valider</button>
+    </form>
   </section>`;
 }
 acts.createInvite = async () => {
   try { S.invite = await db.createInvite(); render(); } catch (e) { toast(e.message); }
 };
-acts.removePartner = async () => {
-  if (!(await askConfirm(`Arrêter de partager avec ${S.other.profile.name} ? Aucun de vous deux ne verra plus le progrès de l’autre.`, 'Arrêter de partager'))) return;
-  try { await db.removePartner(S.other.profile.id); S.who = 'me'; toast('Partage arrêté'); await refresh(); } catch (e) { toast(e.message); }
+acts.removePartner = async (el) => {
+  const o = S.others.find((x) => x.profile.id === el.dataset.arg);
+  if (!o || !(await askConfirm(`Arrêter de partager avec ${o.profile.name} ? Aucun de vous deux ne verra plus le progrès de l’autre.`, 'Arrêter de partager'))) return;
+  try { await db.removePartner(o.profile.id); toast('Partage arrêté'); await refresh(); } catch (e) { toast(e.message); }
 };
 forms.joinFriend = async (form) => {
   try { await db.acceptInvite(String(new FormData(form).get('code'))); S.invite = null; toast('Vous êtes reliés 🎉'); await refresh(); }
@@ -1455,7 +1459,7 @@ function route() {
 }
 async function refresh(v) {
   await loadMine();
-  if (S.profile) await loadOther();
+  if (S.profile) await loadOthers();
   if (v) location.hash = '#/' + v;
   route();
 }
@@ -1464,7 +1468,7 @@ async function refresh(v) {
 acts.startDay = (el) => { S.dayIdx = +el.dataset.arg; location.hash = '#/train'; route(); };
 acts.pickDay = (el) => { S.dayIdx = +el.dataset.arg; render(); };
 acts.who = (el) => { S.who = el.dataset.arg; render(); };
-acts.seeOther = () => { S.who = 'other'; };
+acts.seeOther = (el) => { S.who = el.dataset.arg; };
 acts.slot = (el) => { S.slot = el.dataset.arg; render(); };
 acts.toggleAuth = (el, e) => { e.preventDefault(); S.authMode = S.authMode === 'in' ? 'up' : 'in'; render(); };
 acts.logout = async () => { await db.signOut(); S.me = null; S.profile = null; S.onb = null; render(); };
@@ -1745,7 +1749,7 @@ document.addEventListener('error', (e) => {
   try {
     await db.init();
     S.me = await db.getUser();
-    if (S.me) { await loadMine(); if (S.profile) await loadOther(); }
+    if (S.me) { await loadMine(); if (S.profile) await loadOthers(); }
   } catch (e) {
     console.error(e);
     root.innerHTML = `<div class="auth"><div class="card"><h2>Oups</h2><p>${esc(e.message)}</p><p class="muted">Vérifie js/config.js et ta connexion.</p></div></div>`;
