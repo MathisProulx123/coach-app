@@ -3,7 +3,7 @@
 // la fonction vérifie elle-même qui appelle (jeton de session), puis applique une limite de messages par jour et par personne.
 // Déploiement : voir README, section « Coach IA ».
 //
-// Reçoit : { messages: [{ role: 'user' | 'model', text }], context: {...}, photos?: [{ path, label }] }
+// Reçoit : { messages: [{ role: 'user' | 'model', text }], context: {...}, photos?: [{ path, label }], format?: 'json' }
 // Renvoie : { text }
 //
 // Les photos : le client envoie seulement leur CHEMIN dans le stockage (jamais les octets). Cette fonction va les
@@ -124,7 +124,8 @@ Deno.serve(async (req) => {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents,
       // Les modèles récents « réfléchissent » avant de répondre : on garde de la marge pour ne pas couper la réponse.
-      generationConfig: { temperature: 0.6, maxOutputTokens: 2048 },
+      // format: 'json' (accueil d'un nouvel utilisateur) : Gemini renvoie un objet JSON pur, plus fiable à lire pour l'app.
+      generationConfig: { temperature: 0.6, maxOutputTokens: 2048, ...(body.format === 'json' ? { responseMimeType: 'application/json' } : {}) },
     });
 
     let text: string | undefined;
