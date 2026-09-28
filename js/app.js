@@ -537,9 +537,16 @@ acts.resetProgram = () => {
 // ----- Onglet Repas -----
 function foodPrefsForm(pr, first) {
   return `
+  ${canAI() ? `
+  <div class="card">
+    <h2>Créer mon régime avec le coach IA</h2>
+    <p class="muted">Décris ce que tu veux (ex. « méditerranéen, sans lactose, 5 petits repas, j’aime pas le poisson ») : le coach remplit le formulaire ci-dessous pour toi, à valider avant d’enregistrer.</p>
+    <textarea id="ai-diet-text" rows="2" placeholder="Écris ton régime idéal…"></textarea>
+    <button type="button" class="ghost block" style="margin-top:8px" data-act="aiFillDiet">Laisser le coach remplir mes préférences</button>
+  </div>` : ''}
   <form data-form="food" class="card">
     <h2>${first ? 'Ton plan de repas' : 'Mes préférences alimentaires'}</h2>
-    <p class="muted">Réponds à ces questions pour que je crée des repas qui te conviennent. Tu pourras les changer à tout moment.</p>
+    <p class="muted">Réponds à ces questions pour que je crée des repas qui te conviennent (ou laisse le coach les remplir ci-dessus). Tu pourras les changer à tout moment.</p>
     <label>Allergies ou intolérances</label>
     <div class="checks">${Object.entries(ALLERGENS).map(([k, v]) => `<label class="check"><input type="checkbox" name="allergy" value="${k}" ${pr.allergies.includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
     <label>Régime</label>
@@ -1135,6 +1142,33 @@ acts.askGoal = async (el) => {
     toast('Avis reçu');
     render();
   } catch (e) { toast('Avis IA indisponible : ' + e.message); el.disabled = false; el.textContent = 'Demander l’avis du coach IA sur mon but'; }
+};
+acts.aiFillDiet = async (el) => {
+  const text = document.getElementById('ai-diet-text').value.trim();
+  if (!text) return toast('Décris d’abord ton régime idéal dans le champ ci-dessus.');
+  el.disabled = true; el.textContent = 'Le coach réfléchit…';
+  try {
+    const dietKeys = Object.keys(DIETS).join('", "');
+    const allergyKeys = Object.keys(ALLERGENS).join('", "');
+    const reply = await db.askCoach({
+      messages: [{ role: 'user', text: `Une personne décrit le régime qu'elle veut : « ${text} ». Réponds UNIQUEMENT avec un objet JSON, sans texte autour ni bloc de code, exactement sous cette forme : {"diet": "une valeur parmi \\"${dietKeys}\\"", "allergies": ["zéro ou plusieurs valeurs parmi \\"${allergyKeys}\\""], "dislikes": "aliments à éviter séparés par des virgules, en français, ou chaîne vide", "meals": nombre entier 3, 4 ou 5}. Déduis ces valeurs du mieux possible à partir de sa description ; si un régime mentionné correspond à une restriction (ex. végane, sans gluten via allergies), reflète-le du mieux possible avec ces champs.` }],
+      context: {},
+    });
+    let json = reply.trim().replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+    const parsed = JSON.parse(json);
+    const form = document.querySelector('form[data-form=food]');
+    if (DIETS[parsed.diet]) form.diet.value = parsed.diet;
+    const wanted = new Set(Array.isArray(parsed.allergies) ? parsed.allergies.filter((a) => ALLERGENS[a]) : []);
+    form.querySelectorAll('input[name=allergy]').forEach((c) => { c.checked = wanted.has(c.value); });
+    if (typeof parsed.dislikes === 'string') form.dislikes.value = parsed.dislikes.slice(0, 300);
+    if ([3, 4, 5].includes(+parsed.meals)) form.meals.value = String(parsed.meals);
+    toast('Préférences remplies par le coach — vérifie puis enregistre.');
+    form.scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    toast('Le coach n’a pas pu répondre clairement, réessaie ou remplis le formulaire toi-même.');
+  } finally {
+    el.disabled = false; el.textContent = 'Laisser le coach remplir mes préférences';
+  }
 };
 
 // ================= Formulaires =================
