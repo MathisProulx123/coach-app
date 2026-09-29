@@ -658,6 +658,11 @@ function vFood() {
     <p class="muted">Moyenne hebdomadaire : ${pl.calories} kcal · ${pl.protein} g prot. · ${pl.carbs} g gluc. · ${pl.fat} g lip. Le coach ajuste cette moyenne chaque semaine selon ton check-in.</p>
     <button class="ghost block" data-act="editTargets">Modifier mes cibles</button>
   </section>
+  ${pl.meal_plan && !pl.meal_plan.meals.some((m) => m.tpl) ? `<section class="card">
+    <h2>✨ Nouveaux repas disponibles</h2>
+    <p class="muted">Tes repas peuvent maintenant suivre de vrais modèles (bols, gruau protéiné, wraps, chili…) avec plus d’aliments. Tes préférences et tes cibles ne changent pas.</p>
+    <button type="button" class="ghost block" data-act="remakeMeals">Refaire mes repas</button>
+  </section>` : ''}
   ${cd.crowded && pr.meals < 6 ? `<section class="card warn">
     <h2>💡 Ta cible est grosse pour ${pr.meals} repas</h2>
     <p>Pour atteindre ${dayT.calories} kcal, il a fallu ajouter un aliment en plus à un repas et les portions sont à l’étroit. Avec 6 repas (dont 3 collations), elles seraient plus normales.</p>
@@ -765,6 +770,14 @@ acts.pickCustomFood = async (el) => {
     await savePlan({ meal_plan: swapItemCustom(S.plan.meal_plan, +d.slot, +d.item, food) });
     closeSheet();
     toast(`${food.name} ajouté à ton plan`);
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+acts.remakeMeals = async () => {
+  if (!(await askConfirm('Refaire tous tes repas avec les nouveaux modèles ? Tes changements d’aliments actuels seront remplacés.', 'Refaire mes repas'))) return;
+  try {
+    await savePlan({ meal_plan: buildChoices(prefs(), Date.now(), S.plan) });
+    toast('Nouveaux repas prêts');
     await refresh();
   } catch (e) { toast(e.message); }
 };
