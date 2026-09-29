@@ -2,7 +2,7 @@ import * as db from './db.js';
 import { CONFIG } from './config.js';
 import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight, kgToLb, lbToKg } from './util.js';
 import { parsePlates } from './plates.js';
-import { EXERCISES, buildProgram, altsFor, imgUrl, imgFallback } from './data.js';
+import { EXERCISES, MUSCLES, buildProgram, altsFor, searchExercises, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood } from './foods.js';
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
@@ -372,6 +372,7 @@ function exInfoHtml(id) {
   return `
     <div class="row between"><h2>${esc(ex.name)}</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
     <div class="photos one">${ex.time ? fig(1, 'Position à tenir') : `${fig(0, 'Départ')}${fig(1, 'Arrivée')}`}</div>
+    ${exMeta(ex) ? `<p class="muted">${esc(exMeta(ex))}</p>` : ''}
     <p>${esc(ex.cue)}</p>
     <button class="ghost block" data-act="exAlts" data-arg="${id}">Je ne peux pas / n’aime pas cet exercice : voir les variantes</button>
     <p class="muted">Photos : Free Exercise DB (domaine public).</p>
@@ -482,21 +483,34 @@ acts.delDay = async (el) => {
 acts.addDay = () => { S.draft.push({ label: `Jour ${S.draft.length + 1}`, exercises: [] }); render(); window.scrollTo(0, document.body.scrollHeight); };
 acts.exMove = (el) => { move(S.draft[dOf(el)].exercises, eOf(el), +el.dataset.dir); render(); };
 acts.delEx = (el) => { S.draft[dOf(el)].exercises.splice(eOf(el), 1); render(); };
+// Ligne d'infos d'un exercice : muscle · matériel · type (si ce n'est pas de la musculation) · niveau
+const exMeta = (x) => [x.muscle, x.eq && x.eq !== 'aucun' ? x.eq : x.eq === 'aucun' ? 'poids du corps' : '', x.cat && x.cat !== 'musculation' ? x.cat : '', x.lvl === 3 ? 'avancé' : '']
+  .filter(Boolean).join(' · ');
+function exPickRows() {
+  const { di, q, muscle } = S.exPick;
+  const used = S.draft[di].exercises.map((e) => e.id);
+  const list = searchExercises({ q, muscle, equipment: S.profile.equipment, exclude: used });
+  if (!list.length) return '<p class="muted">Aucun exercice trouvé. Essaie un autre mot (ex. « curl », « fente », « poulie »), ou crée un exercice personnalisé.</p>';
+  return list.map(([id, x]) => `
+      <div class="alt">
+        ${thumb(id)}
+        <div style="flex:1"><b>${esc(x.name)}</b><div class="muted">${esc(exMeta(x))}</div></div>
+        <button type="button" class="small" data-act="pickEx" data-d="${di}" data-id="${esc(id)}">Ajouter</button>
+      </div>`).join('') + (list.length === 60 ? '<p class="muted center">Précise ta recherche ou choisis un muscle pour voir d’autres exercices.</p>' : '');
+}
 acts.addEx = (el) => {
-  const di = dOf(el);
-  const used = new Set(S.draft[di].exercises.map((e) => e.id));
-  const list = Object.entries(EXERCISES).filter(([id, x]) => !used.has(id) && (S.profile.equipment !== 'home' || x.home));
+  S.exPick = { di: dOf(el), q: '', muscle: '' };
   openSheet(`
     <div class="row between"><h2>Ajouter un exercice</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <input type="search" data-filter placeholder="Rechercher (ex. curl, presse, fentes)…" aria-label="Rechercher un exercice">
-    <button type="button" class="block" style="margin:10px 0" data-act="newEx" data-d="${di}">+ Créer un exercice personnalisé</button>
-    ${list.map(([id, x]) => `
-      <div class="alt" data-name="${esc(norm(x.name))}">
-        ${thumb(id)}
-        <div style="flex:1"><b>${esc(x.name)}</b><div class="muted">${esc(x.cue.slice(0, 90))}…</div></div>
-        <button type="button" class="small" data-act="pickEx" data-d="${di}" data-id="${id}">Ajouter</button>
-      </div>`).join('')}`);
+    <p class="muted">Plus de 800 exercices, avec photos et consignes.</p>
+    <input type="search" data-act="exSearch" placeholder="Rechercher (ex. curl, presse, fentes, poulie)…" aria-label="Rechercher un exercice" autocomplete="off">
+    <select data-act="exMuscle" aria-label="Muscle" style="margin-top:8px"><option value="">Tous les muscles</option>${MUSCLES.map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join('')}</select>
+    <button type="button" class="ghost block" style="margin:10px 0" data-act="newEx" data-d="${S.exPick.di}">+ Créer un exercice personnalisé</button>
+    <div id="ex-results">${exPickRows()}</div>`);
 };
+const refreshExPick = () => { const box = document.getElementById('ex-results'); if (box) box.innerHTML = exPickRows(); };
+acts.exSearch = (el, e) => { if (e?.type === 'click') return; S.exPick.q = el.value; refreshExPick(); };
+acts.exMuscle = (el) => { S.exPick.muscle = el.value; refreshExPick(); };
 acts.pickEx = (el) => {
   const id = el.dataset.id, x = EXERCISES[id];
   S.draft[dOf(el)].exercises.push({ id, sets: x.time ? 2 : 3, lo: x.time ? 30 : 8, hi: x.time ? 60 : 12 });
@@ -1028,9 +1042,21 @@ function chatContext() {
     actions_possibles: ACTIONS_DOC,
     metabolisme_de_base_kcal: bmr(S.profile, lastWeight()),
     programme_detaille: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => ({ id: e.id, nom: defOf(e).name, series: e.sets, reps: `${e.lo}-${e.hi}${defOf(e).time ? ' s' : ''}` })) })),
-    exercices_disponibles: Object.entries(EXERCISES).filter(([, e]) => eq !== 'home' || e.home).map(([id, e]) => `${id} : ${e.name}`),
+    // Exercices de base (identifiant : nom), puis toute la bibliothèque par muscle (nom exact = identifiant accepté)
+    exercices_disponibles: Object.entries(EXERCISES).filter(([, e]) => e.base && (eq !== 'home' || e.home)).map(([id, e]) => `${id} : ${e.name}`),
+    bibliotheque_par_muscle: libraryByMuscle(eq),
     repas_numerotes: pl.meal_plan ? computeDay(dayVariant(pl, 'train'), pl.meal_plan, prefs()).meals.map((m, i) => `${i + 1}. ${SLOT_NAMES[m.slot]}`) : [],
   };
+}
+// Toute la bibliothèque, groupée par muscle, noms seulement (compact) : le coach peut proposer n'importe lequel
+// par son nom exact. On laisse de côté la force athlétique et l'haltérophilie (matériel ou technique particuliers).
+function libraryByMuscle(eq) {
+  const out = {};
+  for (const e of Object.values(EXERCISES)) {
+    if (e.base || !e.muscle || (eq === 'home' && !e.home) || e.cat === 'force athlétique' || e.cat === 'haltérophilie') continue;
+    (out[e.muscle] ||= []).push(e.cat && e.cat !== 'musculation' ? `${e.name} (${e.cat})` : e.name);
+  }
+  return Object.fromEntries(Object.entries(out).map(([m, l]) => [m, l.join(' ; ')]));
 }
 // Ce que le coach relit de ses messages précédents : le texte + ce qui est advenu de ses propositions.
 const STATUS_TXT = { pending: 'en attente de réponse', applied: 'appliqué par la personne', declined: 'refusé par la personne', undone: 'appliqué puis annulé par la personne' };

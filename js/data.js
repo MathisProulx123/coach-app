@@ -5,6 +5,10 @@
 //   cue   = consigne d'exécution en une phrase
 //   home  = true si faisable à la maison avec haltères / poids du corps
 //   lower = jambes (progression plus grosse) · bw = poids du corps · time = en secondes · inc = progression en kg
+// Les ~800 autres exercices de la bibliothèque (exercises_lib.js) sont ajoutés à la suite : ceux d'ici restent
+// prioritaires (programmes de départ, variantes choisies à la main).
+import { LIB, BASE_INFO } from './exercises_lib.js';
+
 export const EXERCISES = {
   // --- Jambes ---
   squat: { name: 'Squat', lower: true, img: 'Barbell_Squat', cue: 'Pieds à largeur d’épaules, descends les hanches vers l’arrière jusqu’aux cuisses parallèles, dos droit, remonte en poussant dans les talons.' },
@@ -78,6 +82,18 @@ export const EXERCISES = {
 };
 
 // Variantes proposées quand un exercice ne convient pas (douleur, matériel manquant, pas envie).
+// Muscle principal pour tous, puis la bibliothèque complète (sans écraser un exercice de base).
+for (const x of Object.values(EXERCISES)) { x.base = true; [x.muscle, x.mech, x.eq] = BASE_INFO[x.img] || [x.muscle, '', undefined]; }
+for (const [id, name, muscle, eq, cat, lvl, f, cue] of LIB) {
+  if (EXERCISES[id]) continue;
+  EXERCISES[id] = { name, img: id, muscle, eq, cat, lvl, cue, home: f.includes('h'), lower: f.includes('l'), bw: f.includes('b'), time: f.includes('t'), mech: f.includes('c') ? 'c' : f.includes('i') ? 'i' : '' };
+}
+// Groupes musculaires, dans l'ordre d'affichage (filtre de recherche)
+export const MUSCLES = ['pectoraux', 'dorsaux', 'milieu du dos', 'épaules', 'trapèzes', 'biceps', 'triceps', 'avant-bras', 'abdos',
+  'lombaires', 'quadriceps', 'ischios', 'fessiers', 'mollets', 'adducteurs', 'abducteurs', 'cou'];
+// Type d'exercice (bibliothèque) : ce qui se met dans un programme de musculation
+const TRAINING = new Set([undefined, 'musculation', 'dynamophilie']);
+
 const ALT = {
   squat: ['legpress', 'hack_squat', 'goblet', 'db_squat', 'bulg', 'stepup', 'bw_squat'],
   legpress: ['squat', 'hack_squat', 'goblet', 'bulg', 'stepup', 'db_squat'],
@@ -147,8 +163,30 @@ const ALT = {
 };
 
 // Variantes disponibles pour un exercice, selon le matériel et ce qui est déjà dans la journée.
+// D'abord les variantes choisies à la main, puis, dans la bibliothèque, les exercices du même muscle principal
+// et du même type (polyarticulaire ou isolation, pour ne pas remplacer un squat par une extension de jambes),
+// en musculation et comptés pareil (répétitions ou secondes) ; les exercices de base et les plus simples en premier.
 export function altsFor(id, equipment, exclude = []) {
-  return (ALT[id] || []).filter((a) => EXERCISES[a] && !exclude.includes(a) && (equipment !== 'home' || EXERCISES[a].home));
+  const ok = (a) => EXERCISES[a] && a !== id && !exclude.includes(a) && (equipment !== 'home' || EXERCISES[a].home);
+  const manual = (ALT[id] || []).filter(ok);
+  const ex = EXERCISES[id];
+  if (!ex?.muscle) return manual;
+  const auto = Object.keys(EXERCISES)
+    .filter((a) => ok(a) && !manual.includes(a) && EXERCISES[a].muscle === ex.muscle && TRAINING.has(EXERCISES[a].cat) && !!EXERCISES[a].time === !!ex.time
+      && (!ex.mech || !EXERCISES[a].mech || EXERCISES[a].mech === ex.mech))
+    .sort((a, b) => (!!EXERCISES[b].base - !!EXERCISES[a].base) || ((EXERCISES[a].lvl ?? 1) - (EXERCISES[b].lvl ?? 1)) || EXERCISES[a].name.localeCompare(EXERCISES[b].name, 'fr'));
+  return [...manual, ...auto].slice(0, 15);
+}
+// Recherche dans toute la bibliothèque (éditeur de programme) : texte et muscle, exercices de base en premier.
+const normTxt = (s) => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function searchExercises({ q = '', muscle = '', equipment = 'gym', exclude = [], all = false, limit = 60 } = {}) {
+  const words = normTxt(q).split(/\s+/).filter(Boolean);
+  return Object.entries(EXERCISES)
+    .filter(([id, x]) => !exclude.includes(id) && (equipment !== 'home' || x.home) && (!muscle || x.muscle === muscle)
+      && (all || TRAINING.has(x.cat) || words.length) // étirements, cardio, pliométrie : seulement si on les cherche
+      && words.every((w) => normTxt(`${x.name} ${x.muscle ?? ''} ${x.eq ?? ''} ${x.cat ?? ''}`).includes(w)))
+    .sort(([, a], [, b]) => (!!b.base - !!a.base) || ((a.lvl ?? 1) - (b.lvl ?? 1)) || a.name.localeCompare(b.name, 'fr'))
+    .slice(0, limit);
 }
 
 // Photos de départ (0) et d'arrivée (1) : Free Exercise DB (domaine public, licence Unlicense)

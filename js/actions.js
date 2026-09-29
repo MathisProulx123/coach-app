@@ -22,11 +22,11 @@ export const ACTIONS_DOC = `IMPORTANT : tu peux maintenant faire toi-même des c
 [{"type": "swap_exercise", "from": "squat", "to": "legpress"}]
 \`\`\`
 La personne voit alors un bouton « Appliquer » : rien ne change sans son accord, donc ne dis pas que c'est déjà fait. Propose un bloc seulement quand elle demande un changement ou accepte ta suggestion ; si tu n'es pas sûr de ce qu'elle veut, pose d'abord la question. Pas de bloc si tu ne proposes rien.
-Types possibles (utilise seulement les identifiants fournis dans les données) :
+Types possibles (utilise seulement les identifiants fournis dans les données ; pour un exercice de bibliotheque_par_muscle, mets son nom exact, sans ce qui est entre parenthèses, à la place de l'identifiant) :
 - {"type": "targets", "protein": g, "carbs": g, "fat": g, "water": litres (optionnel)} : cibles moyennes de la semaine ; calories = 4×protéines + 4×glucides + 9×lipides, jamais sous metabolisme_de_base_kcal. Pour changer seulement les calories : {"type": "targets", "calories": kcal} (les glucides s'ajustent, protéines et lipides gardés).
 - {"type": "food_prefs", "diet", "allergies", "other_allergies", "dislikes", "meals", "budget"} : mets seulement les champs à changer (la liste complète pour allergies / other_allergies) ; diet parmi ${Object.keys(DIETS).join(', ')} ; allergies parmi ${Object.keys(ALLERGENS).join(', ')} ; other_allergies : autres allergies (clés ${Object.keys(EXTRA_ALLERGIES).join(', ')} ou nom d'aliment) ; dislikes : texte séparé par des virgules ; meals 3 à 6 ; budget serre, normal ou genereux. Les repas sont recréés.
 - {"type": "reroll_meal", "meal": n} : refait le repas numéro n (1 = premier repas de la journée).
-- {"type": "swap_exercise", "from": id, "to": id} : remplace un exercice partout dans le programme (to parmi exercices_disponibles).
+- {"type": "swap_exercise", "from": id, "to": id} : remplace un exercice partout dans le programme (to parmi exercices_disponibles ou bibliotheque_par_muscle).
 - {"type": "set_sets_reps", "day": "nom du jour", "exercise": id, "sets": n, "reps_min": n, "reps_max": n}
 - {"type": "add_exercise", "day": "nom du jour", "exercise": id, "sets": n, "reps_min": n, "reps_max": n}
 - {"type": "remove_exercise", "day": "nom du jour", "exercise": id}

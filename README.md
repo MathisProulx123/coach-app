@@ -105,6 +105,10 @@ Le bouton **Demander un avis** (après un check-in) et le bouton **Analyser mes 
 
 Dans l'onglet **Séance**, touche un exercice : tu vois la photo de départ et d'arrivée et une consigne. « Voir les variantes » propose des remplacements qui travaillent les mêmes muscles, et le choix s'applique à tout ton programme. Les photos viennent de la base libre [Free Exercise DB](https://github.com/yuhonas/free-exercise-db) (domaine public).
 
+## La bibliothèque d'exercices (plus de 800)
+
+En plus des exercices de départ, l'app contient **plus de 800 exercices** de la [Free Exercise DB](https://github.com/yuhonas/free-exercise-db) (domaine public), chacun avec 2 photos, son muscle principal, son matériel et une consigne en français. On les trouve dans **Modifier mon programme → Ajouter un exercice** (recherche par mot et par muscle), dans les **variantes** d'un exercice (même muscle, même type de mouvement, matériel compatible) et le coach IA peut les proposer. Pour corriger un nom ou une consigne : `tools/exercices/traductions.tsv`, puis `python tools/exercices/construire.py`.
+
 ## Modifier ton programme
 
 Onglet **Séance → Modifier mon programme** : tu peux ajouter, renommer, déplacer ou supprimer un jour, ajouter des exercices de la bibliothèque (avec recherche) ou en créer de zéro (nom, type charge / poids du corps / durée, consigne, lien vidéo), les retirer ou les déplacer, et changer les séries et répétitions. Tout se fait en brouillon : rien n'est gardé avant de toucher **Enregistrer**. « Rétablir le programme de départ » recrée le programme selon ton profil.
