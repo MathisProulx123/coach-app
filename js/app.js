@@ -5,7 +5,7 @@ import { parsePlates } from './plates.js';
 import { EXERCISES, MUSCLES, buildProgram, altsFor, searchExercises, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood } from './foods.js';
-import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 import { ACTIONS_DOC, splitActions, planActions, carbsForCalories } from './actions.js';
 import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
@@ -618,7 +618,7 @@ function foodFields(pr) {
     <p class="muted">Sur une grosse cible (prise de masse), plus de repas donne des portions plus normales.</p>
     <label>Budget épicerie</label>
     <select name="budget">${Object.entries(BUDGETS).map(([k, v]) => `<option value="${k}" ${pr.budget === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-    <p class="muted">Le coach IA en tient compte dans ses conseils (ex. privilégier le riz, les œufs, le poulet en gros format plutôt que des produits chers). Le choix précis des aliments selon leur prix n’est pas encore automatique.</p>`;
+    <p class="muted">Avec un budget serré, les repas évitent les aliments les plus chers (saumon, crevettes, bifteck, noix, petits fruits…) et le coach IA te propose des options économiques.</p>`;
 }
 const readFoodFields = (fd) => ({
   allergies: fd.getAll('allergy'), other_allergies: [...new Set(fd.getAll('allergy_other').map((a) => String(a).trim().slice(0, 40)).filter(Boolean))].slice(0, 15), diet: fd.get('diet'), dislikes: String(fd.get('dislikes') || '').trim(), meals: +fd.get('meals'), budget: fd.get('budget') || 'normal',
@@ -666,6 +666,7 @@ function vFood() {
   ${cd.meals.map((m, si) => `
     <section class="card">
       <div class="row between"><h2>${SLOT_NAMES[m.slot]}</h2><span class="muted">${m1(m.totals.k)} kcal · ${m1(m.totals.p)} g prot.</span></div>
+      ${mealName(m, m.items) ? `<p class="meal-name">${esc(mealName(m, m.items))}</p>` : ''}
       ${m.items.map((it, ii) => it.g <= 0 ? '' : `
         <div class="food">
           <div style="flex:1">
@@ -971,7 +972,7 @@ const FAQ_DEFAULT = 'Je peux répondre aux questions sur l’application (exerci
 
 function aiContext() {
   const p = S.profile, pl = S.plan, pr = prefs();
-  const mealsFor = (dt) => pl.meal_plan ? computeDay(dayVariant(pl, dt), pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
+  const mealsFor = (dt) => pl.meal_plan ? computeDay(dayVariant(pl, dt), pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]}${mealName(m, m.items) ? ` (${mealName(m, m.items)})` : ''} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
   return {
     profil: {
       objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
@@ -1045,7 +1046,7 @@ function chatContext() {
     // Exercices de base (identifiant : nom), puis toute la bibliothèque par muscle (nom exact = identifiant accepté)
     exercices_disponibles: Object.entries(EXERCISES).filter(([, e]) => e.base && (eq !== 'home' || e.home)).map(([id, e]) => `${id} : ${e.name}`),
     bibliotheque_par_muscle: libraryByMuscle(eq),
-    repas_numerotes: pl.meal_plan ? computeDay(dayVariant(pl, 'train'), pl.meal_plan, prefs()).meals.map((m, i) => `${i + 1}. ${SLOT_NAMES[m.slot]}`) : [],
+    repas_numerotes: pl.meal_plan ? computeDay(dayVariant(pl, 'train'), pl.meal_plan, prefs()).meals.map((m, i) => `${i + 1}. ${SLOT_NAMES[m.slot]}${mealName(m, m.items) ? ` : ${mealName(m, m.items)}` : ''}`) : [],
   };
 }
 // Toute la bibliothèque, groupée par muscle, noms seulement (compact) : le coach peut proposer n'importe lequel

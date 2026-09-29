@@ -37,6 +37,121 @@ function rng(seed) { // petit générateur aléatoire reproductible
 }
 
 const candidates = (role, slot, prefs) => FOODS.filter((f) => f.role === role && f.slots.includes(slotKey(slot)) && allowed(f, prefs));
+// Budget « serré » : on laisse de côté les aliments les plus chers (cost 3) quand il reste d'autres choix.
+const affordable = (list, prefs) => {
+  if (prefs.budget !== 'serre') return list;
+  const cheap = list.filter((f) => (f.cost ?? 2) < 3);
+  return cheap.length ? cheap : list;
+};
+
+// ---------- Modèles de repas ----------
+// De vrais repas comme en mangent les gens qui s'entraînent (bols, assiettes, gruau protéiné, omelettes, wraps…),
+// plutôt que des aliments tirés au hasard qui ne vont pas ensemble. Pour chaque rôle, la liste des aliments possibles
+// (filtrés ensuite selon les allergies, le régime, les aliments non aimés et le budget).
+//   name  : début du nom, suivi des noms courts des aliments choisis pour les rôles de « show » (« Bol poulet, riz et brocoli »)
+//   need  : rôle que le nom annonce (« Bagel… », « Spaghetti… ») : si cet aliment est retiré, le repas n'est pas nommé
+export const TEMPLATES = [
+  // --- Déjeuners ---
+  { id: 'gruau', need: 'carb', slots: ['dej'], name: 'Gruau protéiné,', show: ['fruit', 'fat'], items: [
+    ['carb', ['avoine', 'avoine_sg', 'creme_ble']], ['protein', ['yogourt', 'whey', 'vegprot']],
+    ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'pomme', 'poire']], ['fat', ['amandes', 'grenoble', 'arachide', 'beurre_amande', 'cajou']]] },
+  { id: 'oeufs_roties', slots: ['dej'], name: 'Déjeuner', show: ['protein', 'carb', 'fruit'], items: [
+    ['protein', ['oeufs']], ['carb', ['pain', 'muffin_anglais', 'bagel']],
+    ['fruit', ['orange', 'banane', 'fraises', 'kiwi', 'pomme', 'cantaloup', 'melon_eau', 'raisins']], ['fat', ['avocat', 'beurre', 'cheddar']]] },
+  { id: 'omelette', need: 'protein', slots: ['dej'], name: 'Omelette', show: ['veg', 'fat', 'carb'], items: [
+    ['protein', ['oeufs']], ['veg', ['epinards', 'champignons', 'poivron', 'tomates']], ['fat', ['cheddar', 'avocat']], ['carb', ['pain', 'muffin_anglais']]] },
+  { id: 'bol_yogourt', slots: ['dej'], name: 'Bol de', show: ['protein', 'carb', 'fruit'], items: [
+    ['protein', ['yogourt']], ['carb', ['cereales', 'avoine']],
+    ['fruit', ['bleuets', 'fraises', 'framboises', 'mangue', 'banane', 'ananas']], ['fat', ['amandes', 'grenoble', 'cajou', 'arachide']]] },
+  { id: 'smoothie', need: 'fruit', slots: ['dej'], name: 'Smoothie', show: ['fruit', 'protein', 'fat'], items: [
+    ['fruit', ['banane', 'fraises', 'bleuets', 'mangue', 'ananas', 'framboises']], ['protein', ['whey', 'vegprot', 'yogourt']],
+    ['carb', ['avoine']], ['fat', ['arachide', 'beurre_amande']]] },
+  { id: 'bagel_arachide', need: 'carb', slots: ['dej'], name: 'Bagel au', show: ['fat', 'protein', 'fruit'], items: [
+    ['carb', ['bagel']], ['fat', ['arachide', 'beurre_amande']], ['protein', ['yogourt', 'whey', 'vegprot']], ['fruit', ['banane', 'pomme', 'fraises']]] },
+  { id: 'quebecois', slots: ['dej'], name: 'Déjeuner québécois :', show: ['protein', 'carb', 'fruit'], items: [
+    ['protein', ['oeufs']], ['carb', ['feves_lard']], ['fruit', ['orange', 'cantaloup', 'fraises']]] },
+  { id: 'muffin_oeuf', need: 'carb', slots: ['dej'], name: 'Muffin anglais :', show: ['protein', 'fat', 'fruit'], items: [
+    ['carb', ['muffin_anglais']], ['protein', ['oeufs', 'jambon']], ['fat', ['cheddar']], ['fruit', ['orange', 'pomme', 'kiwi']]] },
+  // --- Dîners et soupers ---
+  { id: 'bol', slots: ['din', 'sou'], name: 'Bol', show: ['protein', 'carb', 'veg'], items: [
+    ['protein', ['poulet', 'cuisse_poulet', 'dinde', 'tofu', 'crevettes']], ['carb', ['riz', 'riz_brun', 'quinoa']],
+    ['veg', ['brocoli', 'legumes', 'poivron', 'chou_fleur', 'haricots', 'epinards']], ['fat', ['huile', 'huile_canola', 'avocat', 'cajou']]] },
+  { id: 'assiette', slots: ['din', 'sou'], name: 'Assiette', show: ['protein', 'carb', 'veg'], items: [
+    ['protein', ['saumon', 'truite', 'morue', 'bifteck', 'porc', 'poulet', 'cuisse_poulet']], ['carb', ['patate', 'patate_douce', 'riz', 'riz_brun', 'quinoa', 'orge']],
+    ['veg', ['asperges', 'brocoli', 'haricots', 'choux_bruxelles', 'carottes', 'salade', 'courgette']], ['fat', ['huile', 'beurre']]] },
+  { id: 'spaghetti', need: 'carb', slots: ['din', 'sou'], name: 'Spaghetti sauce', show: ['protein', 'veg'], items: [
+    ['carb', ['pates', 'pates_sg']], ['protein', ['boeuf', 'boeuf_maigre', 'dinde_hachee']],
+    ['veg', ['tomates', 'champignons', 'courgette', 'poivron']], ['fat', ['mozza', 'huile']]] },
+  { id: 'chili', slots: ['din', 'sou'], name: 'Chili de', show: ['protein', 'veg', 'carb'], items: [
+    ['protein', ['dinde_hachee', 'boeuf_maigre', 'boeuf', 'haricots_rouges', 'haricots_noirs']], ['veg', ['poivron', 'tomates']],
+    ['carb', ['riz', 'riz_brun', 'mais']], ['fat', ['cheddar', 'avocat']]] },
+  { id: 'wrap', need: 'carb', slots: ['din', 'sou'], name: 'Wrap', show: ['protein', 'veg', 'fat'], items: [
+    ['carb', ['tortilla']], ['protein', ['poulet', 'dinde', 'thon', 'jambon', 'oeufs']],
+    ['veg', ['salade', 'epinards', 'tomates', 'concombre', 'poivron']], ['fat', ['avocat', 'hummus', 'cheddar', 'mozza']]] },
+  { id: 'pita', need: 'carb', slots: ['din', 'sou'], name: 'Pita garni', show: ['protein', 'veg', 'fat'], items: [
+    ['carb', ['pita']], ['protein', ['poulet', 'pois_chiches', 'thon', 'dinde']],
+    ['veg', ['concombre', 'tomates', 'salade', 'epinards']], ['fat', ['hummus', 'olives']]] },
+  { id: 'saute', slots: ['din', 'sou'], name: 'Sauté', show: ['protein', 'veg', 'carb'], items: [
+    ['protein', ['poulet', 'cuisse_poulet', 'bifteck', 'crevettes', 'tofu', 'porc']], ['veg', ['legumes', 'brocoli', 'poivron', 'champignons', 'pois_verts']],
+    ['carb', ['nouilles_riz', 'riz', 'riz_brun']], ['fat', ['huile_canola', 'cajou']]] },
+  { id: 'salade_repas', slots: ['din', 'sou'], name: 'Salade-repas', show: ['protein', 'carb', 'veg'], items: [
+    ['protein', ['poulet', 'thon', 'saumon', 'oeufs', 'pois_chiches', 'lentilles', 'crevettes', 'sardines']], ['carb', ['quinoa', 'couscous', 'orge', 'patate']],
+    ['veg', ['salade', 'epinards', 'concombre', 'tomates', 'carottes']], ['fat', ['huile', 'avocat', 'olives', 'grenoble']]] },
+  { id: 'mexicain', slots: ['din', 'sou'], name: 'Bol mexicain', show: ['protein', 'carb', 'veg'], items: [
+    ['protein', ['dinde_hachee', 'boeuf', 'haricots_noirs', 'poulet', 'cuisse_poulet']], ['carb', ['riz', 'mais', 'riz_brun']],
+    ['veg', ['poivron', 'tomates', 'salade']], ['fat', ['avocat', 'cheddar']]] },
+  { id: 'curry', slots: ['din', 'sou'], name: 'Curry de', show: ['protein', 'veg', 'carb'], items: [
+    ['protein', ['pois_chiches', 'lentilles', 'tofu', 'poulet', 'cuisse_poulet']], ['veg', ['epinards', 'chou_fleur', 'legumes', 'pois_verts']],
+    ['carb', ['riz', 'riz_brun', 'pita']], ['fat', ['huile', 'cajou']]] },
+  // --- Collations ---
+  { id: 'yogourt_fruit', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
+    ['protein', ['yogourt']], ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'mangue', 'ananas', 'kiwi']]] },
+  { id: 'shake', need: 'protein', slots: ['col'], name: 'Shake protéiné et', show: ['fruit'], items: [
+    ['protein', ['whey', 'vegprot']], ['fruit', ['banane', 'pomme', 'poire', 'orange', 'raisins']]] },
+  { id: 'ficelle_fruit', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
+    ['protein', ['ficelle']], ['fruit', ['pomme', 'poire', 'raisins', 'orange', 'kiwi']]] },
+  { id: 'oeufs_durs', need: 'protein', slots: ['col'], name: 'Œufs cuits durs et', show: ['fruit'], items: [
+    ['protein', ['oeufs']], ['fruit', ['pomme', 'orange', 'raisins', 'poire']]] },
+  { id: 'galettes', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
+    ['carb', ['galette_riz']], ['protein', ['ficelle', 'yogourt', 'whey']], ['fruit', ['pomme', 'banane', 'fraises']]] },
+  { id: 'craquelins', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
+    ['carb', ['craquelins']], ['protein', ['thon', 'ficelle']], ['fruit', ['raisins', 'pomme']]] },
+  { id: 'apres_entrainement', need: 'carb', slots: ['col'], name: 'Après l’entraînement :', show: ['carb', 'fruit'], items: [
+    ['carb', ['lait_choco']], ['fruit', ['banane']]] },
+];
+const TEMPLATE_BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
+
+// Nom d'un repas calculé à partir de son modèle et des aliments vraiment servis (un aliment retiré n'est pas nommé).
+const listFr = (a) => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} et ${a[a.length - 1]}`);
+export function mealName(meal, items) {
+  const t = TEMPLATE_BY_ID[meal.tpl];
+  if (!t) return '';
+  const byRole = {};
+  for (const it of items) if (it.g > 0 && !it.extra && !byRole[it.role]) byRole[it.role] = it.food.short || it.food.name.toLowerCase();
+  if (t.need && !byRole[t.need]) return '';
+  const txt = `${t.name} ${listFr(t.show.map((r) => byRole[r]).filter(Boolean))}`.replace(/\s+/g, ' ').replace(/[,:]\s*$/, '').trim();
+  return txt.charAt(0).toUpperCase() + txt.slice(1);
+}
+
+// Choisit un modèle pour un repas (différent de ceux déjà servis dans la journée si possible), puis un aliment par rôle
+// (en évitant de répéter un aliment déjà utilisé ailleurs dans la journée). null si aucun modèle ne convient.
+function pickFromTemplate(slot, prefs, rand, used, usedTpl, avoidTpl = null) {
+  const options = (ids) => affordable(ids.map((id) => FOOD_BY_ID[id]).filter((f) => f && allowed(f, prefs)), prefs);
+  const ok = TEMPLATES.filter((t) => t.slots.includes(slotKey(slot)) && t.items.every(([, ids]) => options(ids).length));
+  const fresh = ok.filter((t) => !usedTpl.has(t.id) && t.id !== avoidTpl);
+  const pool = fresh.length ? fresh : ok.filter((t) => t.id !== avoidTpl).length ? ok.filter((t) => t.id !== avoidTpl) : ok;
+  if (!pool.length) return null;
+  const t = pool[Math.floor(rand() * pool.length)];
+  usedTpl.add(t.id);
+  const items = t.items.map(([role, ids]) => {
+    const all = options(ids);
+    const freshFoods = all.filter((f) => !used.has(f.id));
+    const food = (freshFoods.length ? freshFoods : all)[Math.floor(rand() * (freshFoods.length || all.length))];
+    used.add(food.id);
+    return { role, food: food.id };
+  });
+  return { slot, tpl: t.id, items };
+}
 
 // Écart entre un plan de repas et les cibles de la journée (plus c'est petit, mieux c'est)
 function dayError(T, choices, prefs) {
@@ -62,11 +177,11 @@ export function buildChoices(prefs, seed = Date.now(), targets = null) {
 
 function pickChoices(prefs, seed) {
   const rand = rng(seed);
-  const used = new Set();
-  const meals = (MEAL_LAYOUT[prefs.meals] || MEAL_LAYOUT[4]).map(([slot]) => ({
+  const used = new Set(), usedTpl = new Set();
+  const meals = (MEAL_LAYOUT[prefs.meals] || MEAL_LAYOUT[4]).map(([slot]) => pickFromTemplate(slot, prefs, rand, used, usedTpl) || ({
     slot,
     items: ROLES[slot].map((role) => {
-      const all = candidates(role, slot, prefs);
+      const all = affordable(candidates(role, slot, prefs), prefs);
       if (!all.length) return null;
       const fresh = all.filter((f) => !used.has(f.id));
       const pool = fresh.length ? fresh : all;
@@ -84,6 +199,8 @@ export function rerollMeal(choices, slotIdx, prefs, targets = null) {
   const cur = choices.meals[slotIdx];
   const attempt = (seed) => {
     const rand = rng(seed);
+    const fromTpl = pickFromTemplate(cur.slot, prefs, rand, new Set(other), new Set(), cur.tpl);
+    if (fromTpl) return { ...choices, seed, meals: choices.meals.map((m, i) => (i === slotIdx ? fromTpl : m)) };
     const items = cur.items.map((it) => {
       const all = candidates(it.role, cur.slot, prefs).filter((f) => f.id !== it.food);
       if (!all.length) return it;
@@ -245,8 +362,9 @@ export function computeDay(targets, choices, prefs = {}) {
   choices.meals.forEach((meal, i) => {
     if (!isSnack(meal.slot)) return;
     const s = share(meal.slot);
-    const items = build(meal, { p: day.p * s, c: day.c * s, f: day.f * s }, ['p']);
-    out[i] = { slot: meal.slot, items, totals: total(items) };
+    const keys = meal.items.some((it) => it.role === 'carb') ? ['p', 'c'] : ['p'];
+    const items = build(meal, { p: day.p * s, c: day.c * s, f: day.f * s }, keys);
+    out[i] = { slot: meal.slot, tpl: meal.tpl, items, totals: total(items) };
     used = add(used, out[i].totals);
   });
   // 2) Repas principaux : se partagent ce qui reste de la journée
@@ -256,7 +374,7 @@ export function computeDay(targets, choices, prefs = {}) {
     if (isSnack(meal.slot)) return;
     const r = share(meal.slot) / mainShare;
     const items = build(meal, { k: rest.k * r, p: rest.p * r, c: rest.c * r, f: rest.f * r }, ['p', 'c', 'f']);
-    out[i] = { slot: meal.slot, items, totals: total(items) };
+    out[i] = { slot: meal.slot, tpl: meal.tpl, items, totals: total(items) };
   });
   finishDay(out, targets, prefs);
   // crowded : il a fallu ajouter un aliment de plus à un repas pour atteindre la cible (portions à l'étroit)
@@ -305,10 +423,14 @@ function finishDay(mealsOut, targets, prefs = {}) {
     // reçu un ajout, et en commençant par le plus petit repas pour répartir les portions.
     while (residual > 30) {
       const used = new Set(mealsOut.flatMap((m) => m.items.map((it) => it.food.id)));
-      const order = [...mealsOut].sort((a, b) => (a.items.some((i) => i.extra) - b.items.some((i) => i.extra)) || a.totals.k - b.totals.k);
+      const order = [...mealsOut].sort((a, b) => (a.items.some((i) => i.extra) - b.items.some((i) => i.extra))
+        || (isSnack(b.slot) - isSnack(a.slot)) || a.totals.k - b.totals.k);
       let meal = null, extra = null;
       for (const m of order) {
-        extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && !f.supplement && f.slots.includes(slotKey(m.slot)) && allowed(f, prefs) && !used.has(f.id) && !(f.unit && f.unit.whole));
+        const tpl = TEMPLATE_BY_ID[m.tpl];
+        const fromTpl = tpl && !isSnack(m.slot) ? new Set(tpl.items.filter(([r]) => r === ROLE_OF_MACRO[key]).flatMap(([, ids]) => ids)) : null;
+        extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && !f.supplement && (fromTpl ? fromTpl.has(f.id) : f.slots.includes(slotKey(m.slot)))
+          && allowed(f, prefs) && !used.has(f.id));
         if (extra) { meal = m; break; }
       }
       if (!extra) break; // plus aucun aliment disponible pour ce macro dans les restrictions actuelles
