@@ -1154,7 +1154,8 @@ async function ask(q, photos = []) {
   window.scrollTo(0, document.body.scrollHeight);
   let text;
   if (!canAI()) {
-    text = faq(q) ?? FAQ_DEFAULT;
+    // Mode simple (démo ou IA désactivée) : réponse toute faite, en le disant clairement pour ne pas décevoir.
+    text = `${faq(q) ?? FAQ_DEFAULT}\n\n(${db.DEMO ? 'Mode démo' : 'Mode simple'} : réponse automatique sur l’utilisation de l’app. Le vrai coach IA, qui te répond de façon personnalisée et peut modifier ton plan, fonctionne une fois connecté à ton compte.)`;
   } else {
     const messages = hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: chatText(m) }));
     // Rappel invisible pour la personne : sans lui, le coach retombe dans ses anciennes consignes (« va dans l'onglet… »).
