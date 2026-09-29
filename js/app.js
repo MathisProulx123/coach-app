@@ -4,9 +4,10 @@ import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, t
 import { parsePlates } from './plates.js';
 import { EXERCISES, MUSCLES, buildProgram, altsFor, searchExercises, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
-import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood } from './foods.js';
-import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood, FOODS } from './foods.js';
+import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, TEMPLATES, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 import { ACTIONS_DOC, splitActions, planActions, carbsForCalories } from './actions.js';
+import { COACH_GUIDE } from './knowledge.js';
 import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
 const S = {
@@ -1040,6 +1041,9 @@ function chatContext() {
   const pl = S.plan, eq = S.profile.equipment;
   return {
     ...aiContext(),
+    guide_du_coach: COACH_GUIDE,
+    aliments_de_l_app: Object.fromEntries(Object.entries(ROLE_NAMES).map(([r, label]) => [label, FOODS.filter((f) => f.role === r).map((f) => f.name).join(' ; ')])),
+    modeles_de_repas_de_l_app: TEMPLATES.map((t) => `${{ dej: 'déjeuner', din: 'dîner ou souper', col: 'collation' }[t.slots[0]]} : ${t.label}`),
     actions_possibles: ACTIONS_DOC,
     metabolisme_de_base_kcal: bmr(S.profile, lastWeight()),
     programme_detaille: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => ({ id: e.id, nom: defOf(e).name, series: e.sets, reps: `${e.lo}-${e.hi}${defOf(e).time ? ' s' : ''}` })) })),
@@ -1581,7 +1585,7 @@ acts.askAI = async (el) => {
     const photos = [...photosOf(cur, 'Cette semaine'), ...photosOf(prev, 'Semaine précédente')];
     const text = await db.askCoach({
       messages: [{ role: 'user', text: 'Commente ma semaine en 4 à 8 phrases : ce qui va bien, ce qui inquiète, et une action concrète pour la semaine à venir. Si des photos sont jointes, commente aussi ce qui est visible dessus (silhouette, posture), en plus des chiffres.' }],
-      context: { ...aiContext(), ajustements_du_coach: cur.coach.messages.map((m) => m.text) },
+      context: { ...aiContext(), guide_du_coach: COACH_GUIDE, ajustements_du_coach: cur.coach.messages.map((m) => m.text) },
       photos,
     });
     await db.saveCheckin({ ...cur, coach: { ...cur.coach, ai: splitActions(text).text } });

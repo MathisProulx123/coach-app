@@ -69,6 +69,10 @@ Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_0
 
 `supabase/migration_004.sql` rend chaque compte privé : on ne voit plus que ses propres données et celles des amis reliés. Vos 2 comptes actuels sont reliés automatiquement (seulement s'il y a au plus 2 profils), donc rien ne change pour vous. Un nouvel utilisateur se relie à un ami dans **Réglages → Partage avec un ami** (code d'invitation valide 7 jours). **À appliquer avant d'ouvrir les inscriptions.** En cas de problème, `migration_004_retour.sql` remet les anciennes règles sans rien effacer.
 
+## Ce que sait le coach IA
+
+À chaque question, le coach reçoit un **guide de connaissances** (`js/knowledge.js`) : protéines selon l'objectif, rythme de perte ou de prise de poids, faim en sèche, prise de masse, entraînement (volume, surcharge progressive, semaines légères), suppléments bien documentés, épicerie à petit budget au Québec, sécurité. Les chiffres viennent de sources reconnues (positions officielles de l'ISSN, recommandations de préparation en musculation naturelle, Guide alimentaire canadien), citées en tête du fichier. Il connaît aussi les 90 aliments, les 25 modèles de repas et les 800+ exercices de l'app.
+
 ## Le coach IA peut modifier l'application
 
 Dans l'onglet **Coach**, demande un changement en mots (« remplace le squat, j'ai mal au genou », « enlève le poisson de mes repas », « monte mes protéines ») : le coach répond puis affiche une carte **Changements proposés**. Rien ne change avant de toucher **Appliquer** ; **Annuler ces changements** revient en arrière. L'app vérifie chaque changement (jamais sous le métabolisme de base, exercices compatibles avec ton matériel, pas de jour vide) et refuse les autres en expliquant pourquoi.
@@ -119,7 +123,7 @@ Attention : changer les jours par semaine ou le matériel dans les Réglages rec
 
 Dans l'onglet **Repas**, l'app pose d'abord tes allergies, ton régime et ce que tu n'aimes pas, puis crée de vrais repas (aliments, quantités, marques) qui atteignent tes cibles de calories, protéines, glucides et lipides. Tu peux échanger un aliment (↔), refaire un repas, modifier tes cibles à la main ou voir la liste d'épicerie de la semaine. Les quantités se recalculent automatiquement quand le coach change tes calories.
 
-Les marques sont des exemples courants au Québec et les valeurs nutritives sont des moyennes : vérifie l'étiquette de ta marque. Pour ajouter un aliment, ajoute une ligne dans `js/foods.js`.
+Les repas suivent **25 modèles** comme en mangent les gens qui s'entraînent (gruau protéiné, bols, assiettes, wraps, chili, sautés, collations…), avec **90 aliments courants** d'une épicerie du Québec. Les valeurs nutritives viennent du Fichier canadien sur les éléments nutritifs (Santé Canada) ; les marques sont des exemples : vérifie l'étiquette de ta marque. Avec un budget « serré », les repas évitent les aliments les plus chers. Pour ajouter un aliment : une ligne dans `js/foods.js` ; pour un modèle de repas : `TEMPLATES` dans `js/meals.js`.
 
 ## Comment ça marche
 
