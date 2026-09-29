@@ -1050,19 +1050,29 @@ function vCoach() {
 const planFields = (pl) => ({ calories: pl.calories, protein: pl.protein, carbs: pl.carbs, fat: pl.fat, program: pl.program, deload: pl.deload, hold: pl.hold, meal_plan: pl.meal_plan ?? null });
 const actionState = () => ({ profile: S.profile, plan: planFields(S.plan), prefs: prefs(), weight: lastWeight(), bmr: bmr(S.profile, lastWeight()) });
 // Contexte du chat : celui de l'avis IA + ce qu'il faut pour proposer des changements précis (identifiants).
-function chatContext() {
+// Sujet des derniers messages : on n'envoie la bibliothèque d'exercices ou la liste d'aliments que si on en parle
+// (réponses plus rapides). Sujet incertain : on envoie les deux.
+const TRAINING_WORDS = /exerci|machine|seance|entrain|muscl|program|squat|developp|curl|jambe|dos|bras|pec|epaule|fess|abdo|douleur|genou|remplac|serie|repetition|cardio|etire|gym|salle|halter|poulie|barre|traction|force|mollet|biceps|triceps/;
+const FOOD_WORDS = /repas|mang|aliment|nourri|proteine|calori|bulk|masse|seche|cut|dejeuner|diner|souper|collation|faim|recette|allerg|vege|budget|epicerie|glucide|lipide|gras|poulet|riz|oeuf|viande|poisson|fruit|legume|snack|dessert|sucre/;
+function chatTopics(hist) {
+  const txt = norm(hist.filter((m) => m.r === 'user').slice(-3).map((m) => m.t).join(' '));
+  const training = TRAINING_WORDS.test(txt), food = FOOD_WORDS.test(txt);
+  return training || food ? { training, food } : { training: true, food: true };
+}
+function chatContext(hist = []) {
+  const topics = chatTopics(hist);
   const pl = S.plan, eq = S.profile.equipment;
   return {
     ...aiContext(),
     guide_du_coach: COACH_GUIDE,
-    aliments_de_l_app: Object.fromEntries(Object.entries(ROLE_NAMES).map(([r, label]) => [label, FOODS.filter((f) => f.role === r).map((f) => f.name).join(' ; ')])),
+    aliments_de_l_app: !topics.food ? '(non envoyé : la question ne porte pas sur l’alimentation)' : Object.fromEntries(Object.entries(ROLE_NAMES).map(([r, label]) => [label, FOODS.filter((f) => f.role === r).map((f) => f.name).join(' ; ')])),
     modeles_de_repas_de_l_app: TEMPLATES.map((t) => `${{ dej: 'déjeuner', din: 'dîner ou souper', col: 'collation' }[t.slots[0]]} : ${t.label}`),
     actions_possibles: ACTIONS_DOC,
     metabolisme_de_base_kcal: bmr(S.profile, lastWeight()),
     programme_detaille: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => ({ id: e.id, nom: defOf(e).name, series: e.sets, reps: `${e.lo}-${e.hi}${defOf(e).time ? ' s' : ''}` })) })),
     // Exercices de base (identifiant : nom), puis toute la bibliothèque par muscle (nom exact = identifiant accepté)
     exercices_disponibles: Object.entries(EXERCISES).filter(([, e]) => e.base && (eq !== 'home' || e.home)).map(([id, e]) => `${id} : ${e.name}`),
-    bibliotheque_par_muscle: libraryByMuscle(eq),
+    bibliotheque_par_muscle: topics.training ? libraryByMuscle(eq) : '(non envoyée : la question ne porte pas sur l’entraînement)',
     repas_numerotes: pl.meal_plan ? computeDay(dayVariant(pl, 'train'), pl.meal_plan, prefs()).meals.map((m, i) => `${i + 1}. ${SLOT_NAMES[m.slot]}${mealName(m, m.items) ? ` : ${mealName(m, m.items)}` : ''}`) : [],
   };
 }
@@ -1160,7 +1170,7 @@ async function ask(q, photos = []) {
     const messages = hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: chatText(m) }));
     // Rappel invisible pour la personne : sans lui, le coach retombe dans ses anciennes consignes (« va dans l'onglet… »).
     messages[messages.length - 1].text += '\n\n(Rappel pour le coach : si je demande un changement faisable avec actions_possibles, propose-le toi-même avec le bloc ```actions```, au lieu de m’expliquer où toucher.)';
-    const payload = { messages, context: chatContext(), photos };
+    const payload = { messages, context: chatContext(hist), photos };
     const quota = (e) => /exceeded your current quota/i.test(e.message); // quota gratuit Gemini du jour épuisé
     const limited = (e) => quota(e) || /limite quotidienne/i.test(e.message); // inutile de réessayer
     const transient = (e) => !limited(e) && /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
