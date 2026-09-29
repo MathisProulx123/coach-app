@@ -5,11 +5,13 @@
 import { EXERCISES, buildProgram } from './data.js';
 import { ALLERGENS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, FOODS, FOOD_BY_ID, allowed } from './foods.js';
 import { calcTargets } from './rules.js';
+import { buildChoices } from './meals.js';
 
 const GOALS = { lose: 'perdre du gras', maintain: 'maintenir', gain: 'prendre du muscle' };
 const ACTIVITY = { low: 'surtout assis', medium: 'assez actif', high: 'très actif' };
 const STYLES = { strength: 'force', hypertrophy: 'hypertrophie', endurance: 'endurance musculaire' };
 const BUDGETS = { serre: 'serré', normal: 'normal', genereux: 'généreux' };
+const SLOT_LABEL = { dej: 'Déjeuner', din: 'Dîner', sou: 'Souper', col: 'Collation', col2: 'Collation', col3: 'Collation' };
 const TYPE_NAMES = {
   targets: 'Cibles', food_prefs: 'Alimentation', reroll_meal: 'Nouveau repas', set_meal: 'Composer un repas', swap_exercise: 'Remplacer un exercice',
   set_sets_reps: 'Séries et répétitions', add_exercise: 'Ajouter un exercice', remove_exercise: 'Retirer un exercice',
@@ -25,8 +27,8 @@ La personne voit alors un bouton « Appliquer » : rien ne change sans son accor
 Types possibles (utilise seulement les identifiants fournis dans les données ; pour un exercice de bibliotheque_par_muscle, mets son nom exact, sans ce qui est entre parenthèses, à la place de l'identifiant) :
 - {"type": "targets", "protein": g, "carbs": g, "fat": g, "water": litres (optionnel)} : cibles moyennes de la semaine ; calories = 4×protéines + 4×glucides + 9×lipides, jamais sous metabolisme_de_base_kcal. Pour changer seulement les calories : {"type": "targets", "calories": kcal} (les glucides s'ajustent, protéines et lipides gardés).
 - {"type": "food_prefs", "diet", "allergies", "other_allergies", "dislikes", "meals", "budget"} : mets seulement les champs à changer (la liste complète pour allergies / other_allergies) ; diet parmi ${Object.keys(DIETS).join(', ')} ; allergies parmi ${Object.keys(ALLERGENS).join(', ')} ; other_allergies : autres allergies (clés ${Object.keys(EXTRA_ALLERGIES).join(', ')} ou nom d'aliment) ; dislikes : texte séparé par des virgules ; meals 3 à 6 ; budget serre, normal ou genereux. Les repas sont recréés.
-- {"type": "reroll_meal", "meal": n} : refait le repas numéro n (1 = premier repas de la journée).
-- {"type": "set_meal", "meal": n, "foods": [noms ou identifiants d'aliments de aliments_de_l_app], "name": "nom court du repas"} : compose le repas numéro n avec ces aliments (au plus un par catégorie : une protéine, un féculent, un légume, un fruit, un gras). L'app calcule elle-même les quantités exactes pour respecter les cibles : c'est l'action à utiliser quand la personne veut un repas précis dans son plan (ne lui dis pas d'utiliser le bouton ↔).
+- {"type": "reroll_meal", "meal": n} : refait un repas ; "meal" = son numéro (1 = premier de la journée) ou "déjeuner", "dîner", "souper", "collation".
+- {"type": "set_meal", "meal": n ou "souper"…, "foods": [noms ou identifiants d'aliments de aliments_de_l_app], "name": "nom court du repas"} : compose le repas numéro n avec ces aliments (au plus un par catégorie : une protéine, un féculent, un légume, un fruit, un gras). L'app calcule elle-même les quantités exactes pour respecter les cibles : c'est l'action à utiliser quand la personne veut un repas précis dans son plan (ne lui dis pas d'utiliser le bouton ↔). Si la personne n'a pas encore de plan de repas, cette action le crée.
 - {"type": "swap_exercise", "from": id, "to": id} : remplace un exercice partout dans le programme (to parmi exercices_disponibles ou bibliotheque_par_muscle).
 - {"type": "set_sets_reps", "day": "nom du jour", "exercise": id, "sets": n, "reps_min": n, "reps_max": n}
 - {"type": "add_exercise", "day": "nom du jour", "exercise": id, "sets": n, "reps_min": n, "reps_max": n}
@@ -65,6 +67,14 @@ function findEx(ref, program) {
   const cat = Object.entries(EXERCISES).find(([, e]) => lc(e.name) === r);
   if (cat) return cat[0];
   return program.flatMap((d) => d.exercises).find((e) => lc(e.custom?.name) === r)?.id || null;
+}
+// Repas désigné par son numéro (1 = premier de la journée) ou par son nom (« souper », « collation »…).
+const SLOT_WORDS = { dejeuner: ['dej'], diner: ['din'], souper: ['sou'], collation: ['col', 'col2', 'col3'] };
+function findMeal(ref, meals) {
+  const k = Number(ref);
+  if (Number.isInteger(k)) return k >= 1 && k <= meals.length ? k - 1 : -1;
+  const slots = SLOT_WORDS[lc(ref).replace(/^(le|la|mon|ma)\s+/, '').split(/\s+/)[0]];
+  return slots ? meals.findIndex((m) => slots.includes(m.slot)) : -1;
 }
 function findDay(ref, program) {
   const i = program.findIndex((d) => lc(d.label) === lc(ref));
@@ -132,9 +142,16 @@ function applyOne(a, st) {
       return `Alimentation : ${parts.join(' · ')} (repas recréés)`;
     }
     case 'set_meal': {
-      const k = n(a.meal);
-      const meals = plan.meal_plan?.meals || [];
-      if (!Number.isInteger(k) || k < 1 || k > meals.length) throw new Error(`repas n° ${a.meal} introuvable (1 à ${meals.length})`);
+      // Pas encore de plan de repas : on le crée d'abord avec les préférences connues, puis on place ce repas.
+      let created = false;
+      if (!plan.meal_plan?.meals?.length) {
+        st.prefs.done = true; st.profileChanged = true; created = true;
+        plan.meal_plan = buildChoices(st.prefs, Date.now(), plan);
+      }
+      const meals = plan.meal_plan.meals;
+      const idx = findMeal(a.meal, meals);
+      if (idx < 0) throw new Error(`repas « ${a.meal} » introuvable (1 à ${meals.length}, ou déjeuner, dîner, souper, collation)`);
+      const k = idx + 1;
       const refs = Array.isArray(a.foods) ? a.foods : [];
       if (!refs.length || refs.length > 6) throw new Error('entre 1 et 6 aliments');
       const foods = refs.map((r) => FOOD_BY_ID[r] || FOODS.find((f) => lc(f.name) === lc(r) || lc(f.short) === lc(r)));
@@ -147,14 +164,15 @@ function applyOne(a, st) {
       if (!roles.includes('protein')) throw new Error('il faut une source de protéines');
       const name = String(a.name || '').trim().slice(0, 60) || undefined;
       plan.meal_plan = { ...plan.meal_plan, meals: meals.map((m, i) => (i === k - 1 ? { slot: m.slot, ...(name ? { name } : {}), items: foods.map((f) => ({ role: f.role, food: f.id })) } : m)) };
-      return `Repas n° ${k}${name ? ` « ${name} »` : ''} : ${foods.map((f) => f.name).join(', ')} (quantités calculées pour tes cibles)`;
+      return `${created ? 'Plan de repas créé, et ' : ''}${SLOT_LABEL[meals[idx].slot]} (repas n° ${k})${name ? ` « ${name} »` : ''} : ${foods.map((f) => f.name).join(', ')} (quantités calculées pour tes cibles)`;
     }
     case 'reroll_meal': {
-      const k = n(a.meal);
-      const count = plan.meal_plan?.meals?.length || 0;
-      if (!Number.isInteger(k) || k < 1 || k > count) throw new Error(`repas n° ${a.meal} introuvable (1 à ${count})`);
-      (st.rerolls ||= []).push(k - 1);
-      return `Nouveau repas n° ${k}`;
+      const meals = plan.meal_plan?.meals || [];
+      if (!meals.length) throw new Error('pas encore de plan de repas (onglet Repas)');
+      const idx = findMeal(a.meal, meals);
+      if (idx < 0) throw new Error(`repas « ${a.meal} » introuvable (1 à ${meals.length}, ou déjeuner, dîner, souper, collation)`);
+      (st.rerolls ||= []).push(idx);
+      return `Nouveau ${SLOT_LABEL[meals[idx].slot].toLowerCase()} (repas n° ${idx + 1})`;
     }
     case 'swap_exercise': {
       const from = findEx(a.from, plan.program), to = findEx(a.to, plan.program);
