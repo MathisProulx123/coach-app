@@ -125,6 +125,7 @@ const TEMPLATE_BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
 // Nom d'un repas calculé à partir de son modèle et des aliments vraiment servis (un aliment retiré n'est pas nommé).
 const listFr = (a) => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} et ${a[a.length - 1]}`);
 export function mealName(meal, items) {
+  if (meal.name) return meal.name; // repas composé à la demande (coach IA)
   const t = TEMPLATE_BY_ID[meal.tpl];
   if (!t) return '';
   const byRole = {};
@@ -365,7 +366,7 @@ export function computeDay(targets, choices, prefs = {}) {
     const s = share(meal.slot);
     const keys = meal.items.some((it) => it.role === 'carb') ? ['p', 'c'] : ['p'];
     const items = build(meal, { p: day.p * s, c: day.c * s, f: day.f * s }, keys);
-    out[i] = { slot: meal.slot, tpl: meal.tpl, items, totals: total(items) };
+    out[i] = { slot: meal.slot, tpl: meal.tpl, name: meal.name, items, totals: total(items) };
     used = add(used, out[i].totals);
   });
   // 2) Repas principaux : se partagent ce qui reste de la journée
@@ -375,7 +376,7 @@ export function computeDay(targets, choices, prefs = {}) {
     if (isSnack(meal.slot)) return;
     const r = share(meal.slot) / mainShare;
     const items = build(meal, { k: rest.k * r, p: rest.p * r, c: rest.c * r, f: rest.f * r }, ['p', 'c', 'f']);
-    out[i] = { slot: meal.slot, tpl: meal.tpl, items, totals: total(items) };
+    out[i] = { slot: meal.slot, tpl: meal.tpl, name: meal.name, items, totals: total(items) };
   });
   finishDay(out, targets, prefs);
   // crowded : il a fallu ajouter un aliment de plus à un repas pour atteindre la cible (portions à l'étroit)

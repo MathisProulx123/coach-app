@@ -1065,7 +1065,7 @@ function chatContext(hist = []) {
   return {
     ...aiContext(),
     guide_du_coach: COACH_GUIDE,
-    aliments_de_l_app: !topics.food ? '(non envoyé : la question ne porte pas sur l’alimentation)' : Object.fromEntries(Object.entries(ROLE_NAMES).map(([r, label]) => [label, FOODS.filter((f) => f.role === r).map((f) => f.name).join(' ; ')])),
+    aliments_de_l_app: !topics.food ? '(non envoyé : la question ne porte pas sur l’alimentation)' : Object.fromEntries(Object.entries(ROLE_NAMES).map(([r, label]) => [label, FOODS.filter((f) => f.role === r).map((f) => `${f.name} (${f.per100.k} kcal, ${f.per100.p} g prot. / 100 g)`).join(' ; ')])),
     modeles_de_repas_de_l_app: TEMPLATES.map((t) => `${{ dej: 'déjeuner', din: 'dîner ou souper', col: 'collation' }[t.slots[0]]} : ${t.label}`),
     actions_possibles: ACTIONS_DOC,
     metabolisme_de_base_kcal: bmr(S.profile, lastWeight()),
