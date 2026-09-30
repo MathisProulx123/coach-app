@@ -119,6 +119,8 @@ function toast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3200);
 }
+// Ligne sous un aliment : vraies marques (« Marques : Natrel, Québon ») ou simple description (« Frais ou surgelé »)
+const brandLine = (b) => !b ? '' : /^[A-ZÀ-Ý]/.test(b) ? `Marques : ${b}` : b[0].toUpperCase() + b.slice(1);
 const bar = (v, t, kind = '') => `<div class="bar ${kind}"><i style="width:${Math.min(100, t ? (v / t) * 100 : 0)}%"></i></div>`;
 const GOALS = { lose: 'Perdre du gras', maintain: 'Maintenir', gain: 'Prendre du muscle' };
 const LEVEL5 = ['1 · Très bas', '2 · Bas', '3 · Correct', '4 · Bon', '5 · Excellent'];
@@ -774,7 +776,7 @@ function vFood() {
           <div style="flex:1">
             <b>${qtyText(it)}</b> ${esc(it.food.name)}${it.extra ? '<br><span class="muted small">+ ajouté pour atteindre ta cible</span>' : ''}
             <div class="macro-line"><span class="mp">P ${m1(it.macros.p)}</span><span class="mg">G ${m1(it.macros.c)}</span><span class="ml">L ${m1(it.macros.f)}</span><span>${m1(it.macros.k)} kcal</span></div>
-            <div class="brands">Marques : ${esc(it.food.brands)}</div>
+            <div class="brands">${esc(brandLine(it.food.brands))}</div>
           </div>
           ${it.extra ? '' : `<button type="button" class="ghost small" data-act="swapFood" data-slot="${si}" data-item="${ii}" aria-label="Remplacer ${esc(it.food.name)}">↔</button>`}
         </div>`).join('')}
@@ -841,7 +843,7 @@ acts.swapFood = (el) => {
     <p class="muted">${ROLE_NAMES[it.role]} du ${SLOT_NAMES[menu.meals[si].slot].toLowerCase()} : <b>${esc(cur.food.name)}</b>. La quantité et le reste du repas se recalculent automatiquement.</p>
     ${eq.length ? eq.map((f) => `
       <div class="alt">
-        <div style="flex:1"><b>${esc(f.name)}</b><div class="muted">Marques : ${esc(f.brands)}</div></div>
+        <div style="flex:1"><b>${esc(f.name)}</b><div class="muted">${esc(brandLine(f.brands))}</div></div>
         <button class="small" data-act="pickFood" data-slot="${si}" data-item="${ii}" data-food="${f.id}">Choisir</button>
       </div>`).join('') : '<p class="muted">Aucun aliment de la liste intégrée ne convient à tes restrictions pour ce repas.</p>'}
     <h3>Ou cherche un aliment précis (marque, produit)</h3>
@@ -922,7 +924,7 @@ acts.grocery = () => {
   openSheet(`
     <div class="row between"><h2>Épicerie (7 jours)</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
     <p class="muted">Quantités pour les 7 prochains jours${menus.length > 1 ? ` (tes ${menus.length} menus)` : ''}, jours d’entraînement, classées par rayon. Riz et pâtes en poids sec ; viandes en poids cuit (compte environ 25 % de plus à l’achat, cru).</p>
-    ${aisles.map((a) => `<h3>${esc(a)}</h3>${list.filter((g) => g.aisle === a).map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">Marques : ${esc(g.brands)}</div></div></div>`).join('')}`).join('')}`);
+    ${aisles.map((a) => `<h3>${esc(a)}</h3>${list.filter((g) => g.aisle === a).map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">${esc(brandLine(g.brands))}</div></div></div>`).join('')}`).join('')}`);
 };
 acts.editTargets = () => {
   const p = S.plan;
@@ -1388,6 +1390,31 @@ forms.chat = async (form) => {
   if (q && !S.chatBusy) await ask(q);
 };
 
+// Taille en cm ou en pieds et pouces (beaucoup de gens au Québec pensent en pieds). Toujours enregistrée en cm.
+const cmToFtIn = (cm) => { const t = Math.round(cm / 2.54); return [Math.floor(t / 12), t % 12]; };
+function heightFieldHtml(cm, unit) {
+  const ft = unit === 'ft', [f, i] = cm ? cmToFtIn(cm) : ['', ''];
+  return `<div class="height" data-unit="${unit}">
+    <div class="labelrow"><label>Taille</label><span class="unitsw">
+      <button type="button" class="${ft ? '' : 'on'}" data-act="heightUnit" data-arg="cm">cm</button><button type="button" class="${ft ? 'on' : ''}" data-act="heightUnit" data-arg="ft">pi-po</button></span></div>
+    <input type="hidden" name="height_unit" value="${unit}">
+    <input name="height_cm" type="number" min="120" max="230" inputmode="numeric" placeholder="cm" aria-label="Taille en centimètres" ${ft ? 'hidden' : 'required'} value="${cm ?? ''}">
+    <div class="ftin" ${ft ? '' : 'hidden'}>
+      <input name="height_ft" type="number" min="4" max="7" inputmode="numeric" placeholder="pi" aria-label="Pieds" ${ft ? 'required' : ''} value="${f}">
+      <input name="height_in" type="number" min="0" max="11" inputmode="numeric" placeholder="po" aria-label="Pouces" value="${i}">
+    </div></div>`;
+}
+acts.heightUnit = (el) => {
+  const box = el.closest('.height'), ft = el.dataset.arg === 'ft';
+  const cm = box.querySelector('[name=height_cm]'), f = box.querySelector('[name=height_ft]'), i = box.querySelector('[name=height_in]');
+  // On garde la valeur déjà tapée en la convertissant
+  if (ft && +cm.value) [f.value, i.value] = cmToFtIn(+cm.value);
+  if (!ft && +f.value) cm.value = Math.round((+f.value * 12 + (+i.value || 0)) * 2.54);
+  box.dataset.unit = el.dataset.arg; box.querySelector('[name=height_unit]').value = el.dataset.arg;
+  cm.hidden = ft; cm.required = !ft; box.querySelector('.ftin').hidden = !ft; f.required = ft;
+  box.querySelectorAll('.unitsw button').forEach((b) => b.classList.toggle('on', b === el));
+};
+
 // form/extra : le récapitulatif de l'onboarding réutilise ce formulaire sous un autre nom, avec les champs alimentaires en plus.
 function profileForm(p = {}, label = 'Enregistrer', pr = prefs(), { form = 'profile', extra = '', ai = true } = {}) {
   const opt = (v, t, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
@@ -1397,7 +1424,7 @@ function profileForm(p = {}, label = 'Enregistrer', pr = prefs(), { form = 'prof
     <div class="grid2">
       <div><label>Sexe</label><select name="sex">${opt('homme', 'Homme', p.sex)}${opt('femme', 'Femme', p.sex)}</select></div>
       <div><label>Année de naissance</label><input name="birth_year" type="number" min="1940" max="2015" required value="${p.birth_year ?? ''}"></div>
-      <div><label>Taille (cm)</label><input name="height_cm" type="number" min="120" max="230" required value="${p.height_cm ?? ''}"></div>
+      ${heightFieldHtml(p.height_cm, pr.height_unit || (wUnit(p) === 'lb' ? 'ft' : 'cm'))}
       <div><label>Poids actuel (${wUnit(p)})</label><input name="start_weight" type="number" step="0.1" min="15" max="550" required value="${p.start_weight != null ? fmtWeight(p.start_weight, wUnit(p)) : ''}"></div>
     </div>
     <label>Objectif</label><select name="goal">${Object.entries(GOALS).map(([k, v]) => opt(k, v, p.goal)).join('')}</select>
@@ -1848,13 +1875,14 @@ forms.auth = async (form) => {
 function readProfile(fd, old, oldPr, unit = wUnit(old)) {
   const p = {
     ...(old || {}),
-    id: S.me.id, name: fd.name.trim(), sex: fd.sex, birth_year: +fd.birth_year, height_cm: +fd.height_cm,
+    id: S.me.id, name: fd.name.trim(), sex: fd.sex, birth_year: +fd.birth_year,
+    height_cm: fd.height_unit === 'ft' ? Math.round(((+fd.height_ft || 0) * 12 + (+fd.height_in || 0)) * 2.54) : +fd.height_cm,
     start_weight: toKg(+fd.start_weight, unit), goal: fd.goal, days_per_week: +fd.days_per_week, equipment: fd.equipment,
     activity: fd.activity, limitations: (fd.limitations || '').trim(), share_photos: !!fd.share_photos,
   };
   const goalText = String(fd.training_goal_text || '').trim().slice(0, 600);
   p.food_prefs = {
-    ...oldPr, goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, unit) : null, goal_date: fd.goal_date || '',
+    ...oldPr, height_unit: fd.height_unit === 'ft' ? 'ft' : 'cm', goal_weight: fd.goal_weight ? toKg(+fd.goal_weight, unit) : null, goal_date: fd.goal_date || '',
     training_goal_text: goalText, training_style: fd.training_style,
     training_goal_ai: goalText === oldPr.training_goal_text ? oldPr.training_goal_ai : '', // texte changé : l'ancien avis n'est plus à jour
   };
