@@ -75,8 +75,6 @@ export const TEMPLATES = [
     ['carb', ['avoine'], { max: 40 }], ['fat', ['arachide', 'beurre_amande']]] },
   { id: 'bagel_arachide', label: 'bagel au beurre d’arachide, yogourt ou shake et fruit', need: 'carb', slots: ['dej'], name: 'Bagel au', show: ['fat', 'protein', 'fruit'], items: [
     ['carb', ['bagel']], ['fat', ['arachide', 'beurre_amande']], ['protein', ['yogourt', 'whey', 'vegprot']], ['fruit', ['banane', 'pomme', 'fraises']]] },
-  { id: 'quebecois', label: 'déjeuner québécois : œufs, rôties, fèves au lard et fruit', slots: ['dej'], name: 'Déjeuner québécois :', show: ['protein', 'carb', 'veg'], items: [
-    ['protein', ['oeufs'], { max: 150 }], ['carb', ['pain'], { min: 70 }], ['veg', ['feves_lard'], { fixed: 125 }], ['fruit', ['orange', 'cantaloup', 'fraises']]] },
   { id: 'cereales', label: 'bol de céréales et lait, yogourt grec et fruit', need: 'carb', slots: ['dej'], name: 'Céréales et lait,', show: ['protein', 'fruit'], items: [
     ['carb', ['cereales']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['yogourt']], ['fruit', ['banane', 'bleuets', 'fraises']]] },
   { id: 'muffin_oeuf', label: 'muffin anglais œuf (ou jambon) et cheddar, fruit', need: 'carb', slots: ['dej'], name: 'Muffin anglais :', show: ['protein', 'fat', 'fruit'], items: [
@@ -157,15 +155,23 @@ export function mealName(meal, items) {
 // Les légumineuses (lentilles, pois chiches…) ont trop peu de protéines pour être la base d'un dîner ou d'un souper
 // de quelqu'un qui mange de la viande ou du poisson : chez lui, le curry et le chili se font au poulet, au bœuf ou au tofu.
 const VEGGIE_DIETS = ['vegetarien', 'vegetalien'];
+// Aliment « de base » pour cette personne : ce que la plupart des gens achètent (common), plus le tofu et les
+// légumineuses pour un végétarien, et le poisson pour un pescétarien (sinon ils n'auraient rien à manger au souper).
+const isCommon = (f, prefs) => f.common || (VEGGIE_DIETS.includes(prefs.diet) && (f.legume || f.id === 'tofu' || f.id === 'vegprot'))
+  || (prefs.diet === 'pescetarien' && f.animal === 'fish');
 function pickFromTemplate(slot, prefs, rand, used, usedTpl, avoidTpl = null) {
   const main = !isSnack(slot) && slot !== 'dej';
+  // strict : seulement les aliments de base. Si aucun repas n'est possible ainsi (restrictions), on prend tous les aliments.
+  let strict = true;
   const options = (ids, role) => {
-    const all = affordable(ids.map((id) => FOOD_BY_ID[id]).filter((f) => f && allowed(f, prefs)), prefs);
+    const all = affordable(ids.map((id) => FOOD_BY_ID[id]).filter((f) => f && allowed(f, prefs) && (!strict || isCommon(f, prefs))), prefs);
     if (role !== 'protein' || !main || VEGGIE_DIETS.includes(prefs.diet)) return all;
     const noLegume = all.filter((f) => !f.legume);
     return noLegume.length ? noLegume : all;
   };
-  const ok = TEMPLATES.filter((t) => t.slots.includes(slotKey(slot)) && t.items.every(([role, ids]) => options(ids, role).length));
+  const possible = () => TEMPLATES.filter((t) => t.slots.includes(slotKey(slot)) && t.items.every(([role, ids]) => options(ids, role).length));
+  let ok = possible();
+  if (!ok.length) { strict = false; ok = possible(); }
   const fresh = ok.filter((t) => !usedTpl.has(t.id) && t.id !== avoidTpl);
   const pool = fresh.length ? fresh : ok.filter((t) => t.id !== avoidTpl).length ? ok.filter((t) => t.id !== avoidTpl) : ok;
   if (!pool.length) return null;
@@ -463,12 +469,17 @@ function finishDay(mealsOut, targets, prefs = {}) {
       const order = [...mealsOut].sort((a, b) => (hasExtra(a) - hasExtra(b))
         || (isSnack(b.slot) - isSnack(a.slot)) || a.totals.k - b.totals.k);
       let meal = null, extra = null;
-      for (const m of order) {
-        const tpl = TEMPLATE_BY_ID[m.tpl];
-        const fromTpl = tpl && !isSnack(m.slot) ? new Set(tpl.items.filter(([r]) => r === ROLE_OF_MACRO[key]).flatMap(([, ids]) => ids)) : null;
-        extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && !f.supplement && (fromTpl ? fromTpl.has(f.id) : f.slots.includes(slotKey(m.slot)))
-          && allowed(f, prefs) && !used.has(f.id));
-        if (extra) { meal = m; break; }
+      // 1er essai : un aliment de base qui a sa place à ce repas (ex. une tranche de pain à côté de l'assiette) ;
+      // sinon, un aliment du modèle du repas, même moins courant.
+      for (const common of [true, false]) {
+        for (const m of order) {
+          const tpl = TEMPLATE_BY_ID[m.tpl];
+          const fromTpl = tpl && !isSnack(m.slot) ? new Set(tpl.items.filter(([r]) => r === ROLE_OF_MACRO[key]).flatMap(([, ids]) => ids)) : null;
+          extra = FOODS.find((f) => f.role === ROLE_OF_MACRO[key] && !f.supplement && allowed(f, prefs) && !used.has(f.id)
+            && (common ? isCommon(f, prefs) && f.slots.includes(slotKey(m.slot)) : (fromTpl ? fromTpl.has(f.id) : f.slots.includes(slotKey(m.slot)))));
+          if (extra) { meal = m; break; }
+        }
+        if (extra) break;
       }
       if (!extra) break; // plus aucun aliment disponible pour ce macro dans les restrictions actuelles
       const per = extra.per100[key] / 100;
