@@ -6,6 +6,7 @@ import { EXERCISES, buildProgram } from './data.js';
 import { ALLERGENS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, FOODS, FOOD_BY_ID, allowed } from './foods.js';
 import { calcTargets } from './rules.js';
 import { buildChoices } from './meals.js';
+import { franciser } from './langue.js';
 
 const GOALS = { lose: 'perdre du gras', maintain: 'maintenir', gain: 'prendre du muscle' };
 const ACTIVITY = { low: 'surtout assis', medium: 'assez actif', high: 'très actif' };
@@ -38,13 +39,14 @@ Types possibles (utilise seulement les identifiants fournis dans les données ; 
 Tu ne peux pas supprimer de données, faire un check-in, ni gérer le compte ou les amis : pour ça, explique où toucher.`;
 
 // Sépare le texte affiché du bloc d'actions. Un bloc illisible est ignoré (le texte reste affiché).
+// Le texte affiché passe par franciser() (mots anglais corrigés) ; le bloc d'actions, lui, n'est pas touché.
 export function splitActions(text) {
   const re = /```actions\s*([\s\S]*?)```/i;
   const m = String(text).match(re);
-  if (!m) return { text: String(text).trim(), actions: [] };
+  if (!m) return { text: franciser(String(text).trim()), actions: [] };
   let actions = [];
   try { const j = JSON.parse(m[1].trim()); actions = (Array.isArray(j) ? j : [j]).filter((a) => a && typeof a.type === 'string').slice(0, 8); } catch { /* bloc illisible */ }
-  return { text: String(text).replace(re, '').trim(), actions };
+  return { text: franciser(String(text).replace(re, '').trim()), actions };
 }
 
 // Nouvelles calories en gardant protéines et lipides : les glucides comblent la différence (lipides réduits,
