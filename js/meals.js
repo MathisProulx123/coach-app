@@ -61,7 +61,7 @@ export const TEMPLATES = [
   // --- Déjeuners ---
   { id: 'gruau', label: 'gruau protéiné au lait, fruits et noix', need: 'carb', slots: ['dej'], name: 'Gruau protéiné,', show: ['fruit', 'fat'], items: [
     ['carb', ['avoine', 'avoine_sg', 'creme_ble']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['yogourt', 'whey', 'vegprot']],
-    ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'pomme', 'poire']], ['fat', ['amandes', 'grenoble', 'arachide', 'beurre_amande', 'cajou']]] },
+    ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'pomme', 'poire']], ['fat', ['amandes', 'grenoble', 'arachide', 'beurre_amande']]] },
   { id: 'oeufs_roties', label: 'œufs, rôties (ou bagel) et fruit', slots: ['dej'], name: 'Déjeuner', show: ['protein', 'carb', 'fruit'], items: [
     ['protein', ['oeufs']], ['carb', ['pain', 'muffin_anglais', 'bagel']],
     ['fruit', ['orange', 'banane', 'fraises', 'kiwi', 'pomme', 'cantaloup', 'melon_eau', 'raisins']], ['fat', ['avocat', 'beurre', 'cheddar']]] },
@@ -69,7 +69,7 @@ export const TEMPLATES = [
     ['protein', ['oeufs']], ['veg', ['epinards', 'champignons', 'poivron', 'tomates']], ['fat', ['cheddar', 'avocat']], ['carb', ['pain', 'muffin_anglais']]] },
   { id: 'bol_yogourt', label: 'bol de yogourt grec, céréales ou gruau, fruits et noix', slots: ['dej'], name: 'Bol de', show: ['protein', 'carb', 'fruit'], items: [
     ['protein', ['yogourt']], ['carb', ['cereales', 'avoine']],
-    ['fruit', ['bleuets', 'fraises', 'framboises', 'mangue', 'banane', 'ananas']], ['fat', ['amandes', 'grenoble', 'cajou', 'arachide']]] },
+    ['fruit', ['bleuets', 'fraises', 'framboises', 'mangue', 'banane', 'ananas']], ['fat', ['amandes', 'grenoble', 'arachide']]] },
   { id: 'smoothie', label: 'smoothie : lait, banane ou petits fruits, whey et beurre d’arachide', need: 'fruit', slots: ['dej'], name: 'Smoothie', show: ['fruit', 'protein', 'fat'], items: [
     ['fruit', ['banane', 'fraises', 'bleuets', 'mangue', 'framboises']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['whey', 'vegprot', 'yogourt']],
     ['carb', ['avoine'], { max: 40 }], ['fat', ['arachide', 'beurre_amande']]] },
@@ -87,7 +87,7 @@ export const TEMPLATES = [
     ['protein', ['boeuf_maigre', 'boeuf', 'dinde_hachee']], ['veg', ['mais'], { fixed: 125 }], ['carb', ['patate']], ['fat', ['beurre']]] },
   { id: 'bol', label: 'bol protéine, riz ou quinoa et légumes', slots: ['din', 'sou'], name: 'Bol', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['poulet', 'cuisse_poulet', 'dinde', 'tofu', 'crevettes']], ['carb', ['riz', 'riz_brun', 'quinoa']],
-    ['veg', ['brocoli', 'legumes', 'poivron', 'chou_fleur', 'haricots', 'epinards']], ['fat', ['huile', 'huile_canola', 'avocat', 'cajou']]] },
+    ['veg', ['brocoli', 'legumes', 'poivron', 'haricots', 'epinards']], ['fat', ['huile', 'huile_canola', 'avocat']]] },
   { id: 'assiette', label: 'assiette viande ou poisson, féculent et légumes', slots: ['din', 'sou'], name: 'Assiette', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['saumon', 'truite', 'morue', 'bifteck', 'porc', 'poulet', 'cuisse_poulet']], ['carb', ['patate', 'patate_douce', 'riz', 'riz_brun', 'quinoa', 'orge']],
     ['veg', ['asperges', 'brocoli', 'haricots', 'choux_bruxelles', 'carottes', 'salade', 'courgette']], ['fat', ['huile', 'beurre']]] },
@@ -105,16 +105,16 @@ export const TEMPLATES = [
     ['veg', ['concombre', 'tomates', 'salade', 'epinards']], ['fat', ['hummus', 'olives']]] },
   { id: 'saute', label: 'sauté de protéine et légumes, nouilles de riz ou riz', slots: ['din', 'sou'], name: 'Sauté', show: ['protein', 'veg', 'carb'], items: [
     ['protein', ['poulet', 'cuisse_poulet', 'bifteck', 'crevettes', 'tofu', 'porc']], ['veg', ['legumes', 'brocoli', 'poivron', 'champignons', 'pois_verts']],
-    ['carb', ['nouilles_riz', 'riz', 'riz_brun']], ['fat', ['huile_canola', 'cajou']]] },
+    ['carb', ['nouilles_riz', 'riz', 'riz_brun']], ['fat', ['huile_canola', 'huile']]] },
   { id: 'salade_repas', label: 'salade-repas protéinée avec féculent', slots: ['din', 'sou'], name: 'Salade-repas', show: ['protein', 'carb', 'veg'], items: [
-    ['protein', ['poulet', 'thon', 'saumon', 'oeufs', 'pois_chiches', 'lentilles', 'crevettes', 'sardines']], ['carb', ['quinoa', 'couscous', 'orge', 'patate']],
+    ['protein', ['poulet', 'thon', 'saumon', 'oeufs', 'pois_chiches', 'crevettes', 'sardines']], ['carb', ['quinoa', 'couscous', 'orge', 'patate']],
     ['veg', ['salade', 'epinards', 'concombre', 'tomates', 'carottes']], ['fat', ['huile', 'avocat', 'olives', 'grenoble']]] },
   { id: 'mexicain', label: 'bol mexicain (viande hachée ou haricots noirs, riz ou maïs, avocat)', slots: ['din', 'sou'], name: 'Bol mexicain', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['dinde_hachee', 'boeuf', 'haricots_noirs', 'poulet', 'cuisse_poulet']], ['carb', ['riz', 'mais', 'riz_brun']],
     ['veg', ['poivron', 'tomates', 'salade']], ['fat', ['avocat', 'cheddar']]] },
-  { id: 'curry', label: 'curry de pois chiches, lentilles, tofu ou poulet avec riz', slots: ['din', 'sou'], name: 'Curry de', show: ['protein', 'veg', 'carb'], items: [
-    ['protein', ['pois_chiches', 'lentilles', 'tofu', 'poulet', 'cuisse_poulet']], ['veg', ['epinards', 'chou_fleur', 'legumes', 'pois_verts']],
-    ['carb', ['riz', 'riz_brun', 'pita']], ['fat', ['huile', 'cajou']]] },
+  { id: 'curry', label: 'curry de poulet, tofu ou pois chiches avec riz', slots: ['din', 'sou'], name: 'Curry de', show: ['protein', 'veg', 'carb'], items: [
+    ['protein', ['poulet', 'cuisse_poulet', 'tofu', 'pois_chiches']], ['veg', ['legumes', 'epinards', 'pois_verts']],
+    ['carb', ['riz', 'riz_brun', 'pita']], ['fat', ['huile', 'huile_canola']]] },
   // --- Collations ---
   { id: 'yogourt_fruit', label: 'yogourt grec et fruits', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
     ['protein', ['yogourt']], ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'mangue', 'ananas', 'kiwi']]] },
@@ -152,7 +152,7 @@ export function mealName(meal, items) {
 
 // Choisit un modèle pour un repas (différent de ceux déjà servis dans la journée si possible), puis un aliment par rôle
 // (en évitant de répéter un aliment déjà utilisé ailleurs dans la journée). null si aucun modèle ne convient.
-// Les légumineuses (lentilles, pois chiches…) ont trop peu de protéines pour être la base d'un dîner ou d'un souper
+// Les légumineuses (pois chiches, haricots…) ont trop peu de protéines pour être la base d'un dîner ou d'un souper
 // de quelqu'un qui mange de la viande ou du poisson : chez lui, le curry et le chili se font au poulet, au bœuf ou au tofu.
 const VEGGIE_DIETS = ['vegetarien', 'vegetalien'];
 // Aliment « de base » pour cette personne : ce que la plupart des gens achètent (common), plus le tofu et les
@@ -340,9 +340,19 @@ function practical(food, g, role) {
   return { g: Math.max(5, Math.round(g / 5) * 5) };
 }
 
+// « 1 ¾ tasse » : au quart de tasse près, plus parlant que des grammes pour des raisins ou des petits fruits.
+const FRACTIONS = ['', ' ¼', ' ½', ' ¾'];
+function cupsText(g, cup) {
+  const q = Math.max(1, Math.round((g / cup) * 4));
+  const whole = Math.floor(q / 4), frac = FRACTIONS[q % 4];
+  const n = whole ? `${whole}${frac}` : frac.trim();
+  return `${n} tasse${q >= 8 ? 's' : ''}`; // « 1 ¾ tasse » : singulier sous 2
+}
+
 export function qtyText(item) {
   const f = item.food;
   if (!item.g) return '0 g';
+  if (item.units == null && f.cup) return `${item.g} g (≈ ${cupsText(item.g, f.cup)})`;
   if (item.units != null) {
     const label = item.units > 1 ? f.unit.p : f.unit.n;
     const shown = Number.isInteger(item.units) ? item.units : String(item.units).replace('.', ',');
@@ -379,7 +389,7 @@ export function computeDay(targets, choices, prefs = {}) {
       const p = practical(it.food, q[i], it.role);
       return { role: it.role, food: it.food, g: p.g, units: p.units ?? null, macros: macrosOf(it.food, p.g), min: it.min, max: it.max, fixed: it.fixed != null };
     });
-    // Si un aliment plafonne (ex. lentilles) et qu'il manque des protéines, on ajoute un complément protéiné.
+    // Si un aliment plafonne (ex. pois chiches) et qu'il manque des protéines, on ajoute un complément protéiné.
     if (keys.includes('p')) {
       const short = T.p - built.reduce((s, it) => s + it.macros.p, 0);
       if (short > 10 && short > T.p * 0.15) {

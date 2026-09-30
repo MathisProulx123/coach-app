@@ -69,7 +69,7 @@ SUPPLÉMENTS (seulement si la personne demande ; rien n'est obligatoire)
 - Vitamine D, fer, etc. : en parler à un professionnel de la santé (prise de sang au besoin). Pas de doses fortes sans avis.
 
 MANGER À PETIT BUDGET (épicerie au Québec)
-- Protéines économiques : œufs, cuisse de poulet, dinde hachée, thon en conserve, légumineuses (lentilles, pois chiches, haricots), tofu, yogourt en grand format.
+- Protéines économiques : œufs, cuisse de poulet, dinde hachée, thon en conserve, légumineuses (pois chiches, haricots), tofu, yogourt en grand format.
 - Féculents économiques : riz, avoine, pâtes, pommes de terre ; légumes et fruits surgelés.
 - Acheter en gros format, suivre les spéciaux des circulaires, cuisiner en lots (préparation de repas) pour 3 ou 4 jours.
 

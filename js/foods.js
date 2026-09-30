@@ -17,6 +17,7 @@
 //   min    : plus petite portion qui a du sens dans une assiette
 //   legume : légumineuse (base d'un repas seulement pour les végétariens : trop peu de protéines pour les autres)
 //   liquid : se compte en litres dans la liste d'épicerie
+//   cup    : grammes dans 1 tasse (250 ml), pour afficher « 260 g (≈ 1 ¾ tasse) » quand l'aliment ne se compte pas à l'unité
 //   common : aliment que la plupart des gens achètent (poulet, bœuf, porc, riz, pâtes, patates…) : les repas sont
 //            composés d'office avec ces aliments ; les autres restent offerts en remplacement (bouton ↔)
 export const ALLERGENS = {
@@ -77,7 +78,6 @@ export const FOODS = [
   F('whey', 'Whey', 'protein', ['dej', 'col'], 400, 80, 10, 5, { common: true, short: 'whey', cost: 2, min: 30, max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
   F('vegprot', 'Poudre de protéines végétales (pois/riz)', 'protein', ['dej', 'col'], 380, 75, 8, 6, { short: 'protéines végétales en poudre', cost: 3, min: 30, max: 60, supplement: true, unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['poudre', 'proteine', 'vegetale'], brands: 'Vega Sport, Sunwarrior, Garden of Life' }),
   F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { short: 'tofu', cost: 1, min: 100, max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
-  F('lentilles', 'Lentilles cuites', 'protein', ['din', 'sou'], 116, 9, 20.1, 0.4, { short: 'lentilles', cost: 1, legume: true, min: 120, max: 200, kw: ['lentille', 'legumineuse'], brands: 'en conserve (ex. Unico, Kirkland) ou sèches' }),
   F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 121, 8.1, 20.8, 0.9, { short: 'haricots rouges', cost: 1, legume: true, min: 120, max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve, égouttés et rincés (ex. Unico, Kirkland, Irresistibles)' }),
   F('haricots_noirs', 'Haricots noirs cuits', 'protein', ['din', 'sou'], 132, 8.9, 23.7, 0.5, { short: 'haricots noirs', cost: 1, legume: true, min: 120, max: 250, kw: ['haricot noir', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
   F('pois_chiches', 'Pois chiches cuits', 'protein', ['din', 'sou'], 138, 7, 22.9, 2.5, { short: 'pois chiches', cost: 1, legume: true, min: 120, max: 250, kw: ['pois chiche', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
@@ -103,7 +103,6 @@ export const FOODS = [
   F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20.1, 0.1, { common: true, short: 'pommes de terre', cost: 1, min: 150, max: 400, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
   F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 20.7, 0.1, { short: 'patate douce', cost: 1, min: 150, max: 400, kw: ['patate douce'], brands: 'fraîche' }),
   F('mais', 'Maïs en grains cuit', 'carb', ['din', 'sou'], 96, 3.4, 21, 1.5, { common: true, short: 'maïs', cost: 1, min: 80, max: 250, kw: ['mais'], brands: 'surgelé ou en conserve (ex. Green Giant, Del Monte)' }),
-  F('feves_lard', 'Fèves au lard végétariennes (conserve)', 'carb', ['dej', 'din'], 94, 4.8, 21.1, 0.4, { short: 'fèves au lard', cost: 1, min: 120, max: 250, kw: ['feve', 'haricot', 'legumineuse'], brands: 'Clark végétariennes, Heinz' }),
   F('galette_riz', 'Galettes de riz', 'carb', ['col'], 387, 8.2, 81.5, 2.8, { common: true, short: 'galettes de riz', cost: 1, min: 9, max: 36, unit: { n: 'galette', p: 'galettes', g: 9, whole: true }, kw: ['galette', 'riz'], brands: 'Quaker, Suzie’s' }),
   F('craquelins', 'Craquelins de blé entier', 'carb', ['col'], 427, 10.6, 69.5, 14.1, { common: true, short: 'craquelins', cost: 2, min: 20, max: 60, allergens: ['gluten'], kw: ['craquelin', 'ble'], brands: 'Triscuit, Breton' }),
   F('lait_choco', 'Lait au chocolat 2 %', 'carb', ['col'], 77, 3, 12.1, 1.9, { common: true, liquid: true, short: 'lait au chocolat', cost: 1, min: 258, max: 516, animal: 'dairy', allergens: ['lait'], unit: { n: 'tasse (250 ml)', p: 'tasses (250 ml)', g: 258, whole: true }, kw: ['lait', 'chocolat'], brands: 'Natrel, Québon' }),
@@ -118,7 +117,6 @@ export const FOODS = [
   F('avocat', 'Avocat', 'fat', ['dej', 'din', 'sou'], 160, 2, 8.5, 14.7, { common: true, short: 'avocat', cost: 2, max: 150, unit: { n: 'demi-avocat', p: 'demi-avocats', g: 75, whole: true }, kw: ['avocat'], brands: 'frais' }),
   F('amandes', 'Amandes', 'fat', ['dej'], 579, 21.1, 21.6, 49.9, { common: true, short: 'amandes', cost: 3, max: 35, allergens: ['noix'], kw: ['amande', 'noix'], brands: 'Blue Diamond, Kirkland, Planters' }),
   F('grenoble', 'Noix de Grenoble', 'fat', ['dej', 'din', 'sou'], 655, 15.2, 13.7, 65.2, { common: true, short: 'noix de Grenoble', cost: 3, max: 35, allergens: ['noix'], kw: ['grenoble', 'noix'], brands: 'Kirkland, Planters' }),
-  F('cajou', 'Noix de cajou rôties', 'fat', ['dej', 'din', 'sou'], 574, 15.3, 32.7, 46.4, { short: 'noix de cajou', cost: 3, max: 35, allergens: ['noix'], kw: ['cajou', 'noix'], brands: 'Kirkland, Planters' }),
   F('arachide', 'Beurre d’arachide naturel', 'fat', ['dej'], 585, 23.7, 21.5, 49.7, { common: true, short: 'beurre d’arachide', cost: 1, max: 32, allergens: ['arachide'], unit: { n: 'c. à soupe', p: 'c. à soupe', g: 16 }, kw: ['arachide', 'peanut'], brands: 'Adams, Kraft, Kirkland' }),
   F('beurre_amande', 'Beurre d’amande', 'fat', ['dej'], 614, 21, 18.8, 55.5, { short: 'beurre d’amande', cost: 3, max: 32, allergens: ['noix'], unit: { n: 'c. à soupe', p: 'c. à soupe', g: 16 }, kw: ['amande', 'noix'], brands: 'Nuts to You, Kirkland' }),
   F('beurre', 'Beurre', 'fat', ['dej', 'din', 'sou'], 717, 0.8, 0.1, 81.1, { common: true, short: 'beurre', cost: 1, max: 20, allergens: ['lait'], animal: 'dairy', unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['beurre'], brands: 'Lactantia, Beatrice, Kirkland' }),
@@ -133,14 +131,14 @@ export const FOODS = [
   F('poire', 'Poire', 'fruit', ['dej', 'col'], 57, 0.4, 15.2, 0.1, { short: 'poire', cost: 1, unit: { n: 'poire', p: 'poires', g: 180, whole: true }, kw: ['poire'], brands: 'fraîche' }),
   F('orange', 'Orange', 'fruit', ['dej', 'col'], 47, 0.9, 11.8, 0.1, { common: true, short: 'orange', cost: 1, unit: { n: 'orange', p: 'oranges', g: 130, whole: true }, kw: ['orange', 'agrume'], brands: 'fraîche' }),
   F('kiwi', 'Kiwi', 'fruit', ['dej', 'col'], 61, 1.1, 14.7, 0.5, { short: 'kiwi', cost: 2, unit: { n: 'kiwi', p: 'kiwis', g: 75, whole: true }, kw: ['kiwi'], brands: 'frais' }),
-  F('bleuets', 'Bleuets', 'fruit', ['dej', 'col'], 57, 0.7, 14.5, 0.3, { common: true, short: 'bleuets', cost: 2, kw: ['bleuet', 'petits fruits'], brands: 'frais ou surgelés' }),
-  F('fraises', 'Fraises', 'fruit', ['dej', 'col'], 33, 0.7, 7.7, 0.3, { common: true, short: 'fraises', cost: 2, kw: ['fraise', 'petits fruits'], brands: 'fraîches ou surgelées' }),
-  F('framboises', 'Framboises', 'fruit', ['dej', 'col'], 53, 1.2, 11.9, 0.7, { short: 'framboises', cost: 3, kw: ['framboise', 'petits fruits'], brands: 'fraîches ou surgelées' }),
-  F('raisins', 'Raisins', 'fruit', ['dej', 'col'], 69, 0.7, 18.1, 0.2, { common: true, short: 'raisins', cost: 2, kw: ['raisin'], brands: 'frais, rouges ou verts' }),
-  F('mangue', 'Mangue', 'fruit', ['dej', 'col'], 60, 0.8, 15, 0.4, { short: 'mangue', cost: 2, kw: ['mangue'], brands: 'fraîche ou en morceaux surgelés' }),
-  F('ananas', 'Ananas', 'fruit', ['dej', 'col'], 50, 0.5, 13.1, 0.1, { short: 'ananas', cost: 2, kw: ['ananas'], brands: 'frais ou en morceaux' }),
-  F('melon_eau', 'Melon d’eau', 'fruit', ['dej', 'col'], 30, 0.6, 7.5, 0.1, { short: 'melon d’eau', cost: 1, kw: ['melon', 'pasteque'], brands: 'frais' }),
-  F('cantaloup', 'Cantaloup', 'fruit', ['dej', 'col'], 34, 0.8, 8.2, 0.2, { short: 'cantaloup', cost: 1, kw: ['melon', 'cantaloup'], brands: 'frais' }),
+  F('bleuets', 'Bleuets', 'fruit', ['dej', 'col'], 57, 0.7, 14.5, 0.3, { cup: 148, common: true, short: 'bleuets', cost: 2, kw: ['bleuet', 'petits fruits'], brands: 'frais ou surgelés' }),
+  F('fraises', 'Fraises', 'fruit', ['dej', 'col'], 33, 0.7, 7.7, 0.3, { cup: 150, common: true, short: 'fraises', cost: 2, kw: ['fraise', 'petits fruits'], brands: 'fraîches ou surgelées' }),
+  F('framboises', 'Framboises', 'fruit', ['dej', 'col'], 53, 1.2, 11.9, 0.7, { cup: 125, short: 'framboises', cost: 3, kw: ['framboise', 'petits fruits'], brands: 'fraîches ou surgelées' }),
+  F('raisins', 'Raisins', 'fruit', ['dej', 'col'], 69, 0.7, 18.1, 0.2, { cup: 150, common: true, short: 'raisins', cost: 2, kw: ['raisin'], brands: 'frais, rouges ou verts' }),
+  F('mangue', 'Mangue', 'fruit', ['dej', 'col'], 60, 0.8, 15, 0.4, { cup: 165, short: 'mangue', cost: 2, kw: ['mangue'], brands: 'fraîche ou en morceaux surgelés' }),
+  F('ananas', 'Ananas', 'fruit', ['dej', 'col'], 50, 0.5, 13.1, 0.1, { cup: 165, short: 'ananas', cost: 2, kw: ['ananas'], brands: 'frais ou en morceaux' }),
+  F('melon_eau', 'Melon d’eau', 'fruit', ['dej', 'col'], 30, 0.6, 7.5, 0.1, { cup: 155, short: 'melon d’eau', cost: 1, kw: ['melon', 'pasteque'], brands: 'frais' }),
+  F('cantaloup', 'Cantaloup', 'fruit', ['dej', 'col'], 34, 0.8, 8.2, 0.2, { cup: 160, short: 'cantaloup', cost: 1, kw: ['melon', 'cantaloup'], brands: 'frais' }),
 
   // ---------- Légumes ----------
   F('brocoli', 'Brocoli cuit', 'veg', ['din', 'sou'], 35, 2.4, 7.2, 0.4, { common: true, short: 'brocoli', cost: 1, kw: ['brocoli'], brands: 'frais ou surgelé' }),
@@ -151,7 +149,6 @@ export const FOODS = [
   F('carottes', 'Carottes', 'veg', ['din', 'sou'], 41, 0.9, 9.6, 0.2, { common: true, short: 'carottes', cost: 1, kw: ['carotte'], brands: 'fraîches' }),
   F('poivron', 'Poivron', 'veg', ['dej', 'din', 'sou'], 31, 1, 6, 0.3, { common: true, short: 'poivron', cost: 2, kw: ['poivron'], brands: 'frais' }),
   F('courgette', 'Courgette cuite', 'veg', ['din', 'sou'], 15, 1.1, 2.7, 0.4, { short: 'courgette', cost: 1, kw: ['courgette', 'zucchini'], brands: 'fraîche' }),
-  F('chou_fleur', 'Chou-fleur cuit', 'veg', ['din', 'sou'], 23, 1.8, 4.1, 0.5, { short: 'chou-fleur', cost: 1, kw: ['chou-fleur', 'chou fleur'], brands: 'frais ou surgelé' }),
   F('asperges', 'Asperges cuites', 'veg', ['din', 'sou'], 22, 2.4, 4.1, 0.2, { short: 'asperges', cost: 3, kw: ['asperge'], brands: 'fraîches' }),
   F('champignons', 'Champignons', 'veg', ['dej', 'din', 'sou'], 22, 3.1, 3.3, 0.3, { short: 'champignons', cost: 2, kw: ['champignon'], brands: 'frais' }),
   F('concombre', 'Concombre', 'veg', ['din', 'sou'], 16, 0.7, 3.6, 0.1, { common: true, short: 'concombre', cost: 1, kw: ['concombre'], brands: 'frais' }),
