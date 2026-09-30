@@ -1,7 +1,7 @@
 // Génère un vrai plan de repas à partir de tes cibles (calories, protéines, glucides, lipides).
 // On mémorise seulement les CHOIX d'aliments (« choices ») ; les quantités sont recalculées à chaque affichage,
 // donc quand le coach change tes calories après un check-in, tes repas s'ajustent automatiquement.
-import { FOODS, FOOD_BY_ID, allowed, resolveFood } from './foods.js';
+import { FOODS, FOOD_BY_ID, allowed, resolveFood, aisleOf, AISLES } from './foods.js';
 
 export const SLOT_NAMES = { dej: 'Déjeuner', din: 'Dîner', col: 'Collation', col2: 'Collation', col3: 'Collation', sou: 'Souper' };
 
@@ -51,6 +51,7 @@ const affordable = (list, prefs) => {
 // (filtrés ensuite selon les allergies, le régime, les aliments non aimés et le budget).
 //   name  : début du nom, suivi des noms courts des aliments choisis pour les rôles de « show » (« Bol poulet, riz et brocoli »)
 //   label : description du modèle (donnée au coach IA)
+//   recipe: comment le préparer, en 1 à 3 phrases (affiché sous le nom du repas)
 //   need  : rôle que le nom annonce (« Bagel… », « Spaghetti… ») : si cet aliment est retiré, le repas n'est pas nommé
 //   items : [rôle, aliments possibles, options] ; options (facultatives) : fixed = quantité fixe en grammes,
 //           min / max = limites de portion propres à ce repas (ex. 2 tranches de pain pour un sandwich),
@@ -59,83 +60,85 @@ const MILK = ['lait', 'boisson_soya'];
 const CUP = 258; // 1 tasse (250 ml) de lait
 export const TEMPLATES = [
   // --- Déjeuners ---
-  { id: 'gruau', label: 'gruau protéiné au lait, fruits et noix', need: 'carb', slots: ['dej'], name: 'Gruau protéiné,', show: ['fruit', 'fat'], items: [
+  { id: 'gruau', recipe: 'Cuire l’avoine dans le lait (2 à 3 min au micro-ondes), puis ajouter la protéine, le fruit et les noix ou le beurre d’arachide.', label: 'gruau protéiné au lait, fruits et noix', need: 'carb', slots: ['dej'], name: 'Gruau protéiné,', show: ['fruit', 'fat'], items: [
     ['carb', ['avoine', 'avoine_sg', 'creme_ble']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['yogourt', 'whey', 'vegprot']],
     ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'pomme', 'poire']], ['fat', ['amandes', 'grenoble', 'arachide', 'beurre_amande']]] },
-  { id: 'oeufs_roties', label: 'œufs, rôties (ou bagel) et fruit', slots: ['dej'], name: 'Déjeuner', show: ['protein', 'carb', 'fruit'], items: [
+  { id: 'oeufs_roties', recipe: 'Cuire les œufs (brouillés, au miroir ou cuits durs), griller le pain et garnir. Le fruit à côté.', label: 'œufs, rôties (ou bagel) et fruit', slots: ['dej'], name: 'Déjeuner', show: ['protein', 'carb', 'fruit'], items: [
     ['protein', ['oeufs']], ['carb', ['pain', 'muffin_anglais', 'bagel']],
     ['fruit', ['orange', 'banane', 'fraises', 'kiwi', 'pomme', 'cantaloup', 'melon_eau', 'raisins']], ['fat', ['avocat', 'beurre', 'cheddar']]] },
-  { id: 'omelette', label: 'omelette aux légumes et fromage, rôties', need: 'protein', slots: ['dej'], name: 'Omelette', show: ['veg', 'fat', 'carb'], items: [
+  { id: 'omelette', recipe: 'Battre les œufs, faire revenir les légumes 2 min à la poêle, verser les œufs, ajouter le fromage et plier. Avec les rôties.', label: 'omelette aux légumes et fromage, rôties', need: 'protein', slots: ['dej'], name: 'Omelette', show: ['veg', 'fat', 'carb'], items: [
     ['protein', ['oeufs']], ['veg', ['epinards', 'champignons', 'poivron', 'tomates']], ['fat', ['cheddar', 'avocat']], ['carb', ['pain', 'muffin_anglais']]] },
-  { id: 'bol_yogourt', label: 'bol de yogourt grec, céréales ou gruau, fruits et noix', slots: ['dej'], name: 'Bol de', show: ['protein', 'carb', 'fruit'], items: [
+  { id: 'bol_yogourt', recipe: 'Dans un bol : le yogourt, les céréales ou le gruau sec, les fruits et les noix. Aucune cuisson.', label: 'bol de yogourt grec, céréales ou gruau, fruits et noix', slots: ['dej'], name: 'Bol de', show: ['protein', 'carb', 'fruit'], items: [
     ['protein', ['yogourt']], ['carb', ['cereales', 'avoine']],
     ['fruit', ['bleuets', 'fraises', 'framboises', 'mangue', 'banane', 'ananas']], ['fat', ['amandes', 'grenoble', 'arachide']]] },
-  { id: 'smoothie', label: 'smoothie : lait, banane ou petits fruits, whey et beurre d’arachide', need: 'fruit', slots: ['dej'], name: 'Smoothie', show: ['fruit', 'protein', 'fat'], items: [
+  { id: 'smoothie', recipe: 'Tout mettre au mélangeur avec le lait et mélanger 30 secondes (des fruits surgelés le rendent plus crémeux).', label: 'smoothie : lait, banane ou petits fruits, whey et beurre d’arachide', need: 'fruit', slots: ['dej'], name: 'Smoothie', show: ['fruit', 'protein', 'fat'], items: [
     ['fruit', ['banane', 'fraises', 'bleuets', 'mangue', 'framboises']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['whey', 'vegprot', 'yogourt']],
     ['carb', ['avoine'], { max: 40 }], ['fat', ['arachide', 'beurre_amande']]] },
-  { id: 'bagel_arachide', label: 'bagel au beurre d’arachide, yogourt ou shake et fruit', need: 'carb', slots: ['dej'], name: 'Bagel au', show: ['fat', 'protein', 'fruit'], items: [
+  { id: 'bagel_arachide', recipe: 'Griller le bagel et le tartiner de beurre d’arachide. Le yogourt (ou le shake) et le fruit à côté.', label: 'bagel au beurre d’arachide, yogourt ou shake et fruit', need: 'carb', slots: ['dej'], name: 'Bagel au', show: ['fat', 'protein', 'fruit'], items: [
     ['carb', ['bagel']], ['fat', ['arachide', 'beurre_amande']], ['protein', ['yogourt', 'whey', 'vegprot']], ['fruit', ['banane', 'pomme', 'fraises']]] },
-  { id: 'cereales', label: 'bol de céréales et lait, yogourt grec et fruit', need: 'carb', slots: ['dej'], name: 'Céréales et lait,', show: ['protein', 'fruit'], items: [
+  { id: 'cereales', recipe: 'Les céréales avec le lait, le yogourt grec et le fruit à côté (ou dessus).', label: 'bol de céréales et lait, yogourt grec et fruit', need: 'carb', slots: ['dej'], name: 'Céréales et lait,', show: ['protein', 'fruit'], items: [
     ['carb', ['cereales']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['yogourt']], ['fruit', ['banane', 'bleuets', 'fraises']]] },
-  { id: 'muffin_oeuf', label: 'muffin anglais œuf (ou jambon) et cheddar, fruit', need: 'carb', slots: ['dej'], name: 'Muffin anglais :', show: ['protein', 'fat', 'fruit'], items: [
+  { id: 'muffin_oeuf', recipe: 'Cuire l’œuf à la poêle (ou réchauffer le jambon), griller le muffin et ajouter le fromage. Le fruit à côté.', label: 'muffin anglais œuf (ou jambon) et cheddar, fruit', need: 'carb', slots: ['dej'], name: 'Muffin anglais :', show: ['protein', 'fat', 'fruit'], items: [
     ['carb', ['muffin_anglais']], ['protein', ['oeufs', 'jambon']], ['fat', ['cheddar']], ['fruit', ['orange', 'pomme', 'kiwi']]] },
   // --- Dîners et soupers ---
-  { id: 'sandwich', label: 'sandwich (jambon, dinde, poulet, thon ou œufs), fromage et crudités', need: 'carb', slots: ['din'], name: 'Sandwich', show: ['protein', 'fat'], items: [
+  { id: 'sandwich', recipe: 'Tartiner le pain, garnir de la protéine, du fromage et des crudités. Se prépare la veille pour le lunch.', label: 'sandwich (jambon, dinde, poulet, thon ou œufs), fromage et crudités', need: 'carb', slots: ['din'], name: 'Sandwich', show: ['protein', 'fat'], items: [
     ['carb', ['pain'], { min: 70, max: 70 }], ['protein', ['jambon', 'dinde', 'poulet', 'thon', 'oeufs']],
     ['veg', ['salade', 'tomates', 'concombre', 'carottes']], ['fat', ['cheddar', 'mozza', 'avocat']]] },
-  { id: 'pate_chinois', label: 'pâté chinois (bœuf haché, maïs, pommes de terre)', need: 'carb', slots: ['din', 'sou'], name: 'Pâté chinois', show: [], items: [
+  { id: 'pate_chinois', recipe: 'Cuire la viande hachée à la poêle et l’étaler dans un plat. Couvrir de maïs, puis des pommes de terre en purée avec le beurre. 20 min au four à 190 °C. Se fait d’avance pour plusieurs repas.', label: 'pâté chinois (bœuf haché, maïs, pommes de terre)', need: 'carb', slots: ['din', 'sou'], name: 'Pâté chinois', show: [], items: [
     ['protein', ['boeuf_maigre', 'boeuf', 'dinde_hachee']], ['veg', ['mais'], { fixed: 125 }], ['carb', ['patate']], ['fat', ['beurre']]] },
-  { id: 'bol', label: 'bol protéine, riz ou quinoa et légumes', slots: ['din', 'sou'], name: 'Bol', show: ['protein', 'carb', 'veg'], items: [
+  { id: 'bol', recipe: 'Cuire le riz. Griller la protéine à la poêle avec l’huile et des épices. Cuire les légumes à la vapeur ou au micro-ondes. Tout servir dans un bol.', label: 'bol protéine, riz ou quinoa et légumes', slots: ['din', 'sou'], name: 'Bol', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['poulet', 'cuisse_poulet', 'dinde', 'tofu', 'crevettes']], ['carb', ['riz', 'riz_brun', 'quinoa']],
     ['veg', ['brocoli', 'legumes', 'poivron', 'haricots', 'epinards']], ['fat', ['huile', 'huile_canola', 'avocat']]] },
-  { id: 'assiette', label: 'assiette viande ou poisson, féculent et légumes', slots: ['din', 'sou'], name: 'Assiette', show: ['protein', 'carb', 'veg'], items: [
+  { id: 'assiette', recipe: 'Cuire la viande à la poêle, au four ou au BBQ. Cuire le féculent (bouilli ou au four) et les légumes à la vapeur.', label: 'assiette viande ou poisson, féculent et légumes', slots: ['din', 'sou'], name: 'Assiette', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['saumon', 'truite', 'morue', 'bifteck', 'porc', 'poulet', 'cuisse_poulet']], ['carb', ['patate', 'patate_douce', 'riz', 'riz_brun', 'quinoa', 'orge']],
     ['veg', ['asperges', 'brocoli', 'haricots', 'choux_bruxelles', 'carottes', 'salade', 'courgette']], ['fat', ['huile', 'beurre']]] },
-  { id: 'spaghetti', label: 'spaghetti sauce à la viande', need: 'carb', slots: ['din', 'sou'], name: 'Spaghetti sauce', show: ['protein', 'veg'], items: [
+  { id: 'spaghetti', recipe: 'Faire revenir la viande hachée, ajouter les légumes et une sauce tomate en pot, mijoter 10 min. Servir sur les pâtes avec le fromage.', label: 'spaghetti sauce à la viande', need: 'carb', slots: ['din', 'sou'], name: 'Spaghetti sauce', show: ['protein', 'veg'], items: [
     ['carb', ['pates', 'pates_sg']], ['protein', ['boeuf', 'boeuf_maigre', 'dinde_hachee']],
     ['veg', ['tomates', 'champignons', 'courgette', 'poivron']], ['fat', ['mozza', 'huile']]] },
-  { id: 'chili', label: 'chili à la viande hachée ou aux haricots, avec riz', slots: ['din', 'sou'], name: 'Chili de', show: ['protein', 'veg', 'carb'], items: [
+  { id: 'chili', recipe: 'Faire revenir la viande hachée avec les légumes, ajouter des tomates en conserve et un assaisonnement à chili, mijoter 15 min. Servir sur le riz.', label: 'chili à la viande hachée ou aux haricots, avec riz', slots: ['din', 'sou'], name: 'Chili de', show: ['protein', 'veg', 'carb'], items: [
     ['protein', ['dinde_hachee', 'boeuf_maigre', 'boeuf', 'haricots_rouges', 'haricots_noirs']], ['veg', ['poivron', 'tomates']],
     ['carb', ['riz', 'riz_brun', 'mais']], ['fat', ['cheddar', 'avocat']]] },
-  { id: 'wrap', label: 'wrap protéiné aux légumes', need: 'carb', slots: ['din', 'sou'], name: 'Wrap', show: ['protein', 'veg', 'fat'], items: [
+  { id: 'wrap', recipe: 'Réchauffer la tortilla, la garnir de la protéine, des légumes et de l’avocat, du hummus ou du fromage, puis rouler.', label: 'wrap protéiné aux légumes', need: 'carb', slots: ['din', 'sou'], name: 'Wrap', show: ['protein', 'veg', 'fat'], items: [
     ['carb', ['tortilla']], ['protein', ['poulet', 'dinde', 'thon', 'jambon', 'oeufs']],
     ['veg', ['salade', 'epinards', 'tomates', 'concombre', 'poivron']], ['fat', ['avocat', 'hummus', 'cheddar', 'mozza']]] },
-  { id: 'pita', label: 'pita garni (poulet ou pois chiches, hummus)', need: 'carb', slots: ['din', 'sou'], name: 'Pita garni', show: ['protein', 'veg', 'fat'], items: [
+  { id: 'pita', recipe: 'Ouvrir le pita et le garnir de la protéine, des légumes et du hummus.', label: 'pita garni (poulet ou pois chiches, hummus)', need: 'carb', slots: ['din', 'sou'], name: 'Pita garni', show: ['protein', 'veg', 'fat'], items: [
     ['carb', ['pita']], ['protein', ['poulet', 'pois_chiches', 'thon', 'dinde']],
     ['veg', ['concombre', 'tomates', 'salade', 'epinards']], ['fat', ['hummus', 'olives']]] },
-  { id: 'saute', label: 'sauté de protéine et légumes, nouilles de riz ou riz', slots: ['din', 'sou'], name: 'Sauté', show: ['protein', 'veg', 'carb'], items: [
+  { id: 'saute', recipe: 'Faire sauter la viande en lanières dans l’huile bien chaude, ajouter les légumes 3 à 4 min et un peu de sauce soya. Servir sur le riz ou les nouilles.', label: 'sauté de protéine et légumes, nouilles de riz ou riz', slots: ['din', 'sou'], name: 'Sauté', show: ['protein', 'veg', 'carb'], items: [
     ['protein', ['poulet', 'cuisse_poulet', 'bifteck', 'crevettes', 'tofu', 'porc']], ['veg', ['legumes', 'brocoli', 'poivron', 'champignons', 'pois_verts']],
     ['carb', ['nouilles_riz', 'riz', 'riz_brun']], ['fat', ['huile_canola', 'huile']]] },
-  { id: 'salade_repas', label: 'salade-repas protéinée avec féculent', slots: ['din', 'sou'], name: 'Salade-repas', show: ['protein', 'carb', 'veg'], items: [
+  { id: 'salade_repas', recipe: 'Dans un grand bol : la laitue et les légumes, la protéine et le féculent déjà cuits (froids ou tièdes), un filet d’huile et de vinaigre.', label: 'salade-repas protéinée avec féculent', slots: ['din', 'sou'], name: 'Salade-repas', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['poulet', 'thon', 'saumon', 'oeufs', 'pois_chiches', 'crevettes', 'sardines']], ['carb', ['quinoa', 'couscous', 'orge', 'patate']],
     ['veg', ['salade', 'epinards', 'concombre', 'tomates', 'carottes']], ['fat', ['huile', 'avocat', 'olives', 'grenoble']]] },
-  { id: 'mexicain', label: 'bol mexicain (viande hachée ou haricots noirs, riz ou maïs, avocat)', slots: ['din', 'sou'], name: 'Bol mexicain', show: ['protein', 'carb', 'veg'], items: [
+  { id: 'mexicain', recipe: 'Faire revenir la viande avec un assaisonnement à tacos. Servir sur le riz avec les légumes, de la salsa et l’avocat ou le fromage.', label: 'bol mexicain (viande hachée ou haricots noirs, riz ou maïs, avocat)', slots: ['din', 'sou'], name: 'Bol mexicain', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['dinde_hachee', 'boeuf', 'haricots_noirs', 'poulet', 'cuisse_poulet']], ['carb', ['riz', 'mais', 'riz_brun']],
     ['veg', ['poivron', 'tomates', 'salade']], ['fat', ['avocat', 'cheddar']]] },
-  { id: 'curry', label: 'curry de poulet, tofu ou pois chiches avec riz', slots: ['din', 'sou'], name: 'Curry de', show: ['protein', 'veg', 'carb'], items: [
+  { id: 'curry', recipe: 'Faire revenir la protéine avec les légumes, ajouter de la pâte de cari et des tomates en conserve, mijoter 10 min. Servir sur le riz.', label: 'curry de poulet, tofu ou pois chiches avec riz', slots: ['din', 'sou'], name: 'Curry de', show: ['protein', 'veg', 'carb'], items: [
     ['protein', ['poulet', 'cuisse_poulet', 'tofu', 'pois_chiches']], ['veg', ['legumes', 'epinards', 'pois_verts']],
     ['carb', ['riz', 'riz_brun', 'pita']], ['fat', ['huile', 'huile_canola']]] },
   // --- Collations ---
-  { id: 'yogourt_fruit', label: 'yogourt grec et fruits', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
+  { id: 'yogourt_fruit', recipe: 'Le yogourt avec les fruits dessus.', label: 'yogourt grec et fruits', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
     ['protein', ['yogourt']], ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'mangue', 'ananas', 'kiwi']]] },
-  { id: 'shake', label: 'shake protéiné et fruit', need: 'protein', slots: ['col'], name: 'Shake protéiné et', show: ['fruit'], items: [
+  { id: 'shake', recipe: 'Mélanger la poudre dans 250 à 300 ml d’eau au shaker. Le fruit à côté.', label: 'shake protéiné et fruit', need: 'protein', slots: ['col'], name: 'Shake protéiné et', show: ['fruit'], items: [
     ['protein', ['whey', 'vegprot']], ['fruit', ['banane', 'pomme', 'poire', 'orange', 'raisins']]] },
-  { id: 'ficelle_fruit', label: 'fromage ficelle et fruit', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
+  { id: 'ficelle_fruit', recipe: 'Prêt à manger : parfait dans le sac pour le travail ou l’école.', label: 'fromage ficelle et fruit', slots: ['col'], name: '', show: ['protein', 'fruit'], items: [
     ['protein', ['ficelle']], ['fruit', ['pomme', 'poire', 'raisins', 'orange', 'kiwi']]] },
-  { id: 'oeufs_durs', label: 'œufs cuits durs et fruit', need: 'protein', slots: ['col'], name: 'Œufs cuits durs et', show: ['fruit'], items: [
+  { id: 'oeufs_durs', recipe: 'Cuire les œufs 10 min dans l’eau bouillante, puis les refroidir à l’eau froide. Se préparent d’avance pour 3 ou 4 jours.', label: 'œufs cuits durs et fruit', need: 'protein', slots: ['col'], name: 'Œufs cuits durs et', show: ['fruit'], items: [
     ['protein', ['oeufs']], ['fruit', ['pomme', 'orange', 'raisins', 'poire']]] },
-  { id: 'galettes', label: 'galettes de riz, fromage ou yogourt et fruit', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
+  { id: 'galettes', recipe: 'Garnir les galettes du fromage ou du yogourt. Le fruit à côté.', label: 'galettes de riz, fromage ou yogourt et fruit', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
     ['carb', ['galette_riz']], ['protein', ['ficelle', 'yogourt', 'whey']], ['fruit', ['pomme', 'banane', 'fraises']]] },
-  { id: 'craquelins', label: 'craquelins, thon ou fromage et fruit', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
+  { id: 'craquelins', recipe: 'Les craquelins avec le thon ou le fromage. Le fruit à côté.', label: 'craquelins, thon ou fromage et fruit', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
     ['carb', ['craquelins']], ['protein', ['thon', 'ficelle']], ['fruit', ['raisins', 'pomme']]] },
-  { id: 'roties_arachide', label: 'rôtie au beurre d’arachide et banane', need: 'carb', slots: ['col'], name: 'Rôtie au', show: ['fat', 'fruit'], items: [
+  { id: 'roties_arachide', recipe: 'Griller le pain, le tartiner de beurre d’arachide et y trancher le fruit.', label: 'rôtie au beurre d’arachide et banane', need: 'carb', slots: ['col'], name: 'Rôtie au', show: ['fat', 'fruit'], items: [
     ['carb', ['pain'], { fixed: 35 }], ['fat', ['arachide', 'beurre_amande'], { fixed: 16 }], ['fruit', ['banane', 'pomme']]] },
-  { id: 'cereales_col', label: 'céréales et lait', need: 'carb', slots: ['col'], name: 'Céréales et lait,', show: ['fruit'], items: [
+  { id: 'cereales_col', recipe: 'Les céréales avec le lait, le fruit dessus.', label: 'céréales et lait', need: 'carb', slots: ['col'], name: 'Céréales et lait,', show: ['fruit'], items: [
     ['carb', ['cereales']], ['milk', MILK, { fixed: CUP, first: true }], ['fruit', ['banane', 'bleuets', 'fraises']]] },
-  { id: 'apres_entrainement', label: 'lait au chocolat et banane après l’entraînement', need: 'carb', slots: ['col'], name: 'Après l’entraînement :', show: ['carb', 'fruit'], items: [
+  { id: 'apres_entrainement', recipe: 'Le lait au chocolat et la banane dans l’heure qui suit l’entraînement.', label: 'lait au chocolat et banane après l’entraînement', need: 'carb', slots: ['col'], name: 'Après l’entraînement :', show: ['carb', 'fruit'], items: [
     ['carb', ['lait_choco']], ['fruit', ['banane']]] },
 ];
 const TEMPLATE_BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
+
+export const mealRecipe = (meal) => (meal.name ? '' : TEMPLATE_BY_ID[meal.tpl]?.recipe || '');
 
 // Nom d'un repas calculé à partir de son modèle et des aliments vraiment servis (un aliment retiré n'est pas nommé).
 const listFr = (a) => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} et ${a[a.length - 1]}`);
@@ -532,19 +535,34 @@ function finishDay(mealsOut, targets, prefs = {}) {
   }
 }
 
-// Liste d'épicerie pour N jours
-export function groceryList(computed, days = 7) {
+const normTxt = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/œ/g, 'oe');
+// Liste d'épicerie : days = [[journée calculée, nombre de jours], …] (un menu peut revenir plusieurs jours par semaine).
+// Chaque ligne indique son rayon ; la liste est triée par rayon, puis par nom.
+export function groceryList(days) {
   const acc = {};
-  computed.meals.forEach((m) => m.items.filter((it) => it.g > 0).forEach((it) => {
-    acc[it.food.id] = acc[it.food.id] || { food: it.food, g: 0 };
-    acc[it.food.id].g += it.g * days;
-  }));
-  return Object.values(acc).map(({ food, g }) => {
+  for (const [computed, n] of days) {
+    computed.meals.forEach((m) => m.items.filter((it) => it.g > 0).forEach((it) => {
+      acc[it.food.id] = acc[it.food.id] || { food: it.food, g: 0 };
+      acc[it.food.id].g += it.g * n;
+    }));
+  }
+  const line = ({ food, g }) => {
     if (food.liquid) return { name: food.name, text: `${String(Math.round(g / 250) / 4).replace('.', ',')} L`, brands: food.brands };
-    if (food.id === 'avocat') return { name: food.name, text: `${Math.ceil(g / 150)} ×`, brands: food.brands };
-    if (food.unit && food.unit.whole && food.unit.g > 5) return { name: food.name, text: `${Math.round(g / food.unit.g)} ×`, brands: food.brands };
+    if (food.id === 'avocat') { const n = Math.ceil(g / 150); return { name: food.name, text: `${n} avocat${n > 1 ? 's' : ''}`, brands: food.brands }; }
+    if (food.unit && food.unit.whole && food.unit.g > 5) {
+      // « 14 oranges », « 35 Œufs entiers », « 21 tranches Pain de blé entier » : sans répéter le même mot deux fois.
+      const n = Math.round(g / food.unit.g), unitTxt = n > 1 ? food.unit.p : food.unit.n;
+      const nm = normTxt(food.name), un = normTxt(food.unit.n);
+      if (nm === un) return { name: '', text: `${n} ${unitTxt}`, brands: food.brands };
+      if (nm.startsWith(un)) return { name: food.name, text: `${n}`, brands: food.brands };
+      return { name: food.name, text: `${n} ${unitTxt}`, brands: food.brands };
+    }
+    if (food.dry) g /= food.dry; // riz, pâtes… : poids sec, comme sur le sac
+    const name = food.dry ? `${food.name.replace(/ cuit(e?s?)$/, '')} (sec)` : food.name;
     if (food.external) return { name: food.name, text: `≈ ${Math.round(g / 50) * 50} g`, brands: food.brands };
     const r = Math.round(g / 50) * 50;
-    return { name: food.name, text: r >= 1000 ? `${String(r / 1000).replace('.', ',')} kg` : `${r} g`, brands: food.brands };
-  }).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return { name, text: r >= 1000 ? `${String(r / 1000).replace('.', ',')} kg` : `${r} g`, brands: food.brands };
+  };
+  return Object.values(acc).map((x) => ({ ...line(x), aisle: aisleOf(x.food) }))
+    .sort((a, b) => AISLES.indexOf(a.aisle) - AISLES.indexOf(b.aisle) || a.name.localeCompare(b.name, 'fr'));
 }

@@ -5,7 +5,7 @@ import { parsePlates } from './plates.js';
 import { EXERCISES, MUSCLES, buildProgram, altsFor, searchExercises, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood, FOODS } from './foods.js';
-import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, TEMPLATES, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, mealRecipe, TEMPLATES, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 import { ACTIONS_DOC, splitActions, planActions, carbsForCalories } from './actions.js';
 import { COACH_GUIDE } from './knowledge.js';
 import { franciser } from './langue.js';
@@ -683,6 +683,7 @@ function vFood() {
     <section class="card">
       <div class="row between"><h2>${SLOT_NAMES[m.slot]}</h2><span class="muted">${m1(m.totals.k)} kcal · ${m1(m.totals.p)} g prot.</span></div>
       ${mealName(m, m.items) ? `<p class="meal-name">${esc(mealName(m, m.items))}</p>` : ''}
+      ${mealRecipe(m) ? `<details class="recipe"><summary>Comment le préparer</summary><p class="muted">${esc(mealRecipe(m))}</p></details>` : ''}
       ${m.items.map((it, ii) => it.g <= 0 ? '' : `
         <div class="food">
           <div style="flex:1">
@@ -808,11 +809,12 @@ acts.reroll = async (el) => {
   } catch (e) { toast(e.message); }
 };
 acts.grocery = () => {
-  const list = groceryList(computeDay(curDayTargets(), S.plan.meal_plan, prefs()), 7);
+  const list = groceryList([[computeDay(curDayTargets(), S.plan.meal_plan, prefs()), 7]]);
+  const aisles = [...new Set(list.map((g) => g.aisle))];
   openSheet(`
     <div class="row between"><h2>Épicerie (7 jours)</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <p class="muted">Quantités pour une semaine de ton plan actuel (jour d’entraînement).</p>
-    ${list.map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">Marques : ${esc(g.brands)}</div></div></div>`).join('')}`);
+    <p class="muted">Quantités pour une semaine de ton plan actuel (jour d’entraînement), classées par rayon. Riz et pâtes en poids sec ; viandes en poids cuit (compte environ 25 % de plus à l’achat, cru).</p>
+    ${aisles.map((a) => `<h3>${esc(a)}</h3>${list.filter((g) => g.aisle === a).map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">Marques : ${esc(g.brands)}</div></div></div>`).join('')}`).join('')}`);
 };
 acts.editTargets = () => {
   const p = S.plan;

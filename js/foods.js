@@ -18,6 +18,7 @@
 //   min    : plus petite portion qui a du sens dans une assiette
 //   legume : légumineuse (base d'un repas seulement pour les végétariens : trop peu de protéines pour les autres)
 //   liquid : se compte en litres dans la liste d'épicerie
+//   dry    : grammes cuits pour 1 g sec (riz ≈ 3) : la liste d'épicerie donne le poids sec, celui du sac
 //   cup    : grammes dans 1 tasse (250 ml), pour afficher « 260 g (≈ 1 ¾ tasse) » quand l'aliment ne se compte pas à l'unité
 //   common : aliment que la plupart des gens achètent (poulet, bœuf, porc, riz, pâtes, patates…) : les repas sont
 //            composés d'office avec ces aliments ; les autres restent offerts en remplacement (bouton ↔)
@@ -93,14 +94,14 @@ export const FOODS = [
   F('muffin_anglais', 'Muffin anglais de blé', 'carb', ['dej'], 223, 8.7, 44.8, 2, { common: true, short: 'muffin anglais', cost: 1, min: 57, max: 114, allergens: ['gluten'], unit: { n: 'muffin anglais', p: 'muffins anglais', g: 57, whole: true }, kw: ['muffin', 'ble'], brands: 'Dempster’s, Weston' }),
   F('tortilla', 'Tortilla de blé (grande)', 'carb', ['din', 'sou'], 325, 8.7, 55.6, 7.1, { common: true, short: 'tortilla', cost: 1, min: 70, max: 140, allergens: ['gluten'], unit: { n: 'tortilla', p: 'tortillas', g: 70, whole: true }, kw: ['tortilla', 'wrap', 'ble'], brands: 'Old El Paso, Dempster’s, Mission' }),
   F('pita', 'Pain pita de blé entier', 'carb', ['din', 'sou'], 266, 9.8, 55, 2.6, { short: 'pita', cost: 1, min: 64, max: 128, allergens: ['gluten'], unit: { n: 'pita', p: 'pitas', g: 64, whole: true }, kw: ['pita', 'pain', 'ble'], brands: 'Pita Break, marque de l’épicerie' }),
-  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28.2, 0.3, { common: true, short: 'riz', cost: 1, min: 100, max: 300, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 111, 2.6, 23, 0.9, { short: 'riz brun', cost: 1, min: 100, max: 300, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 30.9, 0.9, { common: true, short: 'pâtes', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
-  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { common: true, short: 'pâtes', cost: 2, gf: true, min: 100, max: 300, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
-  F('nouilles_riz', 'Nouilles de riz cuites', 'carb', ['din', 'sou'], 108, 1.8, 24, 0.2, { short: 'nouilles de riz', cost: 2, min: 100, max: 300, kw: ['nouille', 'riz'], brands: 'Thai Kitchen, Sun-Luck' }),
-  F('couscous', 'Couscous cuit', 'carb', ['din', 'sou'], 112, 3.8, 23.2, 0.2, { short: 'couscous', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['couscous', 'ble'], brands: 'Casbah, marque de l’épicerie' }),
-  F('orge', 'Orge perlé cuit', 'carb', ['din', 'sou'], 123, 2.3, 28.2, 0.4, { short: 'orge', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['orge'], brands: 'marque de l’épicerie' }),
-  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21.3, 1.9, { short: 'quinoa', cost: 2, min: 100, max: 300, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
+  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28.2, 0.3, { dry: 3, common: true, short: 'riz', cost: 1, min: 100, max: 300, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 111, 2.6, 23, 0.9, { dry: 3, short: 'riz brun', cost: 1, min: 100, max: 300, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 30.9, 0.9, { dry: 2.4, common: true, short: 'pâtes', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
+  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { dry: 2.4, common: true, short: 'pâtes', cost: 2, gf: true, min: 100, max: 300, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
+  F('nouilles_riz', 'Nouilles de riz cuites', 'carb', ['din', 'sou'], 108, 1.8, 24, 0.2, { dry: 2.5, short: 'nouilles de riz', cost: 2, min: 100, max: 300, kw: ['nouille', 'riz'], brands: 'Thai Kitchen, Sun-Luck' }),
+  F('couscous', 'Couscous cuit', 'carb', ['din', 'sou'], 112, 3.8, 23.2, 0.2, { dry: 2.8, short: 'couscous', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['couscous', 'ble'], brands: 'Casbah, marque de l’épicerie' }),
+  F('orge', 'Orge perlé cuit', 'carb', ['din', 'sou'], 123, 2.3, 28.2, 0.4, { dry: 3, short: 'orge', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['orge'], brands: 'marque de l’épicerie' }),
+  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21.3, 1.9, { dry: 3, short: 'quinoa', cost: 2, min: 100, max: 300, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
   F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20.1, 0.1, { common: true, short: 'pommes de terre', cost: 1, min: 150, max: 400, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
   F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 20.7, 0.1, { short: 'patate douce', cost: 1, min: 150, max: 400, kw: ['patate douce'], brands: 'fraîche' }),
   F('mais', 'Maïs en grains cuit', 'carb', ['din', 'sou'], 96, 3.4, 21, 1.5, { common: true, short: 'maïs', cost: 1, min: 80, max: 250, kw: ['mais'], brands: 'surgelé ou en conserve (ex. Green Giant, Del Monte)' }),
@@ -159,6 +160,19 @@ export const FOODS = [
 ];
 
 export const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
+
+// Rayon de l'épicerie, pour une liste d'épicerie dans l'ordre où on marche dans le magasin.
+export const AISLES = ['Fruits et légumes', 'Viandes et poissons', 'Produits laitiers et œufs', 'Boulangerie', 'Garde-manger', 'Autres'];
+const BAKERY = ['pain', 'bagel', 'muffin_anglais', 'tortilla', 'pita'];
+const CANNED = ['thon', 'sardines'];
+export function aisleOf(food) {
+  if (food.external) return 'Autres';
+  if (food.role === 'fruit' || food.role === 'veg' || ['avocat', 'tofu', 'patate', 'patate_douce'].includes(food.id)) return 'Fruits et légumes';
+  if ((food.animal === 'meat' || food.animal === 'fish') && !CANNED.includes(food.id)) return 'Viandes et poissons';
+  if (food.role === 'milk' || ((food.animal === 'dairy' || food.animal === 'egg') && !food.supplement)) return 'Produits laitiers et œufs';
+  if (BAKERY.includes(food.id)) return 'Boulangerie';
+  return 'Garde-manger';
+}
 
 // Un aliment d'un repas vient soit de la liste ci-dessus (id), soit d'une recherche externe (custom).
 export const resolveFood = (id, custom) => custom || FOOD_BY_ID[id];

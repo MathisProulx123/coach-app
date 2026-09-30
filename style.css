@@ -224,3 +224,6 @@ button.link:hover { background: none; color: var(--text); text-decoration: under
 .onb-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 8px; margin-top: 6px; color: var(--muted); font-size: 14px; }
 .onboard > .block { margin-top: 4px; }
 .meal-name { margin: -2px 0 6px; font-weight: 600; color: var(--accent-strong); }
+.recipe { margin: 0 0 6px; }
+.recipe summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.recipe p { margin: 4px 0 0; }
