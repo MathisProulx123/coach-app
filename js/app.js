@@ -983,6 +983,7 @@ function vCheckin() {
         <label class="photoslot ${cur.photos?.[k] ? 'on' : ''}"><input type="file" accept="image/*" data-photonow="${k}">
           <span class="photoprev">${cur.photos?.[k] ? `<img data-path="${esc(cur.photos[k])}" alt="">` : '📷'}</span><span>${t}</span></label>`).join('')}
       </div>
+      ${canAI() ? `<button type="button" class="ghost block" style="margin-top:14px" data-act="reviewPhotos" id="review-photos" ${Object.keys(cur.photos || {}).length ? '' : 'hidden'}>Faire regarder mes photos par le coach</button>` : ''}
     </section>
     ${canAI() ? `<section class="card"><h2>Avis du coach IA</h2>${cur.coach?.ai ? `<p>${esc(cur.coach.ai)}</p>` : '<p class="muted">Un commentaire personnalisé sur ta semaine.</p><button class="block" data-act="askAI">Demander un avis</button>'}</section>`
       : ''}`;
@@ -1283,8 +1284,8 @@ acts.applyActions = async (el) => {
   const done = items.filter((it) => it.ok).map((it) => it.label);
   try {
     const undo = { profile: structuredClone(S.profile), plan: planFields(S.plan) };
-    if (st.profileChanged) {
-      const p = { ...st.profile, food_prefs: st.prefs };
+    if (st.profileChanged || m.wp) {
+      const p = { ...st.profile, food_prefs: m.wp ? { ...st.prefs, weak_review: today() } : st.prefs };
       await db.saveProfile(p);
       S.profile = p;
     }
@@ -1328,7 +1329,7 @@ const streamHtml = (t) => esc(franciser(t.split('```')[0].trim() || '…')).repl
 // Sinon (question, conseil) : réflexion courte, donc réponse plus rapide.
 const CHANGE_WORDS = /remplac|chang|ajout|enleve|retir|monte|baisse|augment|diminu|modifi|\bmets?\b|compos|refai|remet|passe[rz]? a|unite|cible|calori|annul|\boui\b|\bok\b|d.accord|vas-y|parfait|\bgo\b|fais-le|applique/;
 
-async function ask(q, photos = [], { mustAct = false } = {}) {
+async function ask(q, photos = [], { mustAct = false, wp = false } = {}) {
   const hist = chatLoad();
   hist.push({ r: 'user', t: q });
   chatSave(hist);
@@ -1380,7 +1381,7 @@ async function ask(q, photos = [], { mustAct = false } = {}) {
         } catch { /* on garde la première réponse, la carte expliquera pourquoi c'est impossible */ }
       }
     } catch (e) {
-      const help = faq(q);
+      const help = photos.length ? null : faq(q); // analyse de photos : l'aide sur l'application serait hors sujet
       text = limited(e)
         ? `${help ? `${help}\n\n` : ''}${quota(e)
           ? 'Le coach IA a atteint la limite gratuite de Google. Réessaie dans une minute. Si ça continue, c’est la limite du jour : elle se renouvelle vers 3 h du matin (heure du Québec).'
@@ -1390,6 +1391,7 @@ async function ask(q, photos = [], { mustAct = false } = {}) {
   }
   const split = splitActions(text);
   const msg = { r: 'ai', t: split.text || 'Voici ce que je te propose :' };
+  if (wp) msg.wp = true; // ajustement « points faibles » : l'appliquer lance le délai de 4 semaines
   if (split.actions.length) Object.assign(msg, { actions: split.actions, status: 'pending', labels: planActions(split.actions, actionState()).items.map((i) => i.label) });
   hist.push(msg);
   chatSave(hist);
@@ -1401,7 +1403,23 @@ async function ask(q, photos = [], { mustAct = false } = {}) {
 acts.ask = (el) => ask(el.dataset.q);
 acts.askPhotos = () => ask('Analyse l’évolution visible sur mes photos de progrès (silhouette, posture), en plus de mes derniers chiffres.', recentPhotos(2));
 // Points faibles : les photos du dernier check-in (face, profil, dos) + une demande d'ajustement du programme.
-acts.weakPoints = () => ask('Regarde mes dernières photos de progrès (face, profil, dos) et dis-moi quels groupes musculaires sont en retard par rapport aux autres. Propose ensuite un petit ajustement de mon programme d’entraînement pour les renforcer, et termine ta réponse par le bloc actions pour que je puisse l’appliquer d’un bouton.', recentPhotos(1), { mustAct: true });
+acts.weakPoints = () => ask('Regarde mes dernières photos de progrès (face, profil, dos) et dis-moi quels groupes musculaires sont en retard par rapport aux autres. Propose ensuite un petit ajustement de mon programme d’entraînement pour les renforcer, et termine ta réponse par le bloc actions pour que je puisse l’appliquer d’un bouton.', recentPhotos(1), { mustAct: true, wp: true });
+// Après un check-in avec photos : le coach les regarde de lui-même et propose un ajustement seulement s'il en faut un.
+// Un ajustement appliqué bloque les suivants pendant 4 semaines (sinon le programme grossirait à chaque check-in) :
+// d'ici là, le coach commente seulement l'évolution.
+const WEAK_WAIT_DAYS = 28;
+function autoPhotoReview() {
+  if (!canAI() || !recentPhotos(1).length) return false;
+  location.hash = '#/coach'; S.view = 'coach';
+  const last = prefs().weak_review;
+  if (last && daysBetween(last, today()) < WEAK_WAIT_DAYS) {
+    ask(`Je viens d’envoyer mes photos de la semaine. Tu m’as déjà fait un ajustement pour mes points faibles le ${fmtDate(last)} : ne propose aucun nouveau changement. Dis-moi seulement, en quelques phrases, ce que tu vois sur les photos et comment ça évolue.`, recentPhotos(1));
+    return true;
+  }
+  ask('Je viens d’envoyer mes photos de la semaine. Regarde-les : si un groupe musculaire est en retard par rapport aux autres, propose un petit ajustement de mon programme d’entraînement et termine par le bloc actions pour que je l’applique d’un bouton. Si c’est bien équilibré, ou si tu m’as déjà proposé un ajustement dans les dernières semaines, dis-le simplement et n’ajoute rien.', recentPhotos(1), { mustAct: true, wp: true });
+  return true;
+}
+acts.reviewPhotos = () => autoPhotoReview();
 acts.buildDiet = () => ask('Aide-moi à construire mon régime : pose-moi des questions une à la fois sur ce que j’aime manger (au déjeuner, au dîner, au souper, en collation), les quantités qui me conviennent, et mon budget épicerie. Base-toi sur des aliments courants et faciles à trouver, pas des produits de niche, et propose des combinaisons qui se mangent bien ensemble. Commence par ta première question.');
 acts.clearChat = () => { chatSave([]); render(); };
 forms.chat = async (form) => {
@@ -2022,6 +2040,7 @@ async function replacePhoto(input) {
     await db.saveCheckin(cur);
     prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`;
     input.parentElement.classList.add('on');
+    const again = document.getElementById('review-photos'); if (again) again.hidden = false;
     toast('Photo enregistrée');
   } catch (e) { prev.innerHTML = before; toast(e.message); }
 }
@@ -2049,6 +2068,7 @@ forms.checkin = async (form) => {
     await db.saveCheckin(c);
     await savePlan({ calories: res.calories, protein: res.protein, carbs: res.carbs, fat: res.fat, deload: res.deload, hold: res.hold, reasons: res.messages });
     await refresh('checkin');
+    if (Object.keys(photos).length && autoPhotoReview()) toast('Check-in envoyé : le coach regarde tes photos…');
   } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = 'Envoyer mon check-in'; }
 };
 

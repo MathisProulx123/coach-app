@@ -217,7 +217,14 @@ function applyOne(a, st) {
       if (a.type === 'add_exercise') {
         if (!EXERCISES[id]) throw new Error(`exercice « ${a.exercise} » inconnu`);
         if (st.profile.equipment === 'home' && !EXERCISES[id].home) throw new Error(`${EXERCISES[id].name} demande du matériel de salle`);
-        if (day.exercises.some((e) => e.id === id)) throw new Error(`${EXERCISES[id].name} est déjà dans ${day.label}`);
+        // Déjà dans la séance : plutôt que « Impossible », on ajoute une série à l'exercice existant (jusqu'à 5).
+        const had = day.exercises.findIndex((e) => e.id === id);
+        if (had >= 0) {
+          const cur = day.exercises[had];
+          if (cur.sets >= 5) throw new Error(`${EXERCISES[id].name} est déjà dans ${day.label}`);
+          day.exercises[had] = { ...cur, sets: cur.sets + 1 };
+          return `${day.label} : ${EXERCISES[id].name} passe de ${cur.sets} à ${cur.sets + 1} séries (déjà dans la séance)`;
+        }
         day.exercises.push({ id, sets, lo, hi });
         return `${day.label} : ajouter ${EXERCISES[id].name} (${sets} × ${reps})`;
       }
