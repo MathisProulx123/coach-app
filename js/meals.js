@@ -24,12 +24,13 @@ const ROLES = {
 };
 const isSnack = (slot) => slot === 'col' || slot === 'col2' || slot === 'col3';
 const slotKey = (slot) => (slot === 'col2' || slot === 'col3' ? 'col' : slot);
-export const ROLE_NAMES = { protein: 'Protéines', carb: 'Glucides', fat: 'Lipides', fruit: 'Fruit', veg: 'Légumes' };
+export const ROLE_NAMES = { protein: 'Protéines', carb: 'Glucides', fat: 'Lipides', fruit: 'Fruit', veg: 'Légumes', milk: 'Lait' };
 const VEG_GRAMS = 150;
 // Portion la plus basse / la plus haute d'un aliment. min : sous ce seuil la portion n'a pas de sens dans une
 // assiette (ex. 50 g de bœuf, 10 g d'avoine) ; les fruits peuvent monter jusqu'à ~2 portions les jours à gros glucides.
-const minG = (food) => food.min ?? 0;
-const maxG = (food, role) => (role === 'fruit' ? Math.max(260, food.unit ? food.unit.g * 2 : 0) : food.max ?? 600);
+// Un modèle de repas peut resserrer ces limites pour un aliment (ex. 40 g d'avoine au plus dans un smoothie) : it.min / it.max.
+const minG = (food, it = {}) => it.min ?? food.min ?? 0;
+const maxG = (food, role, it = {}) => it.max ?? (role === 'fruit' ? Math.max(260, food.unit ? food.unit.g * 2 : 0) : food.max ?? 600);
 
 function rng(seed) { // petit générateur aléatoire reproductible
   let a = seed >>> 0;
@@ -51,10 +52,15 @@ const affordable = (list, prefs) => {
 //   name  : début du nom, suivi des noms courts des aliments choisis pour les rôles de « show » (« Bol poulet, riz et brocoli »)
 //   label : description du modèle (donnée au coach IA)
 //   need  : rôle que le nom annonce (« Bagel… », « Spaghetti… ») : si cet aliment est retiré, le repas n'est pas nommé
+//   items : [rôle, aliments possibles, options] ; options (facultatives) : fixed = quantité fixe en grammes,
+//           min / max = limites de portion propres à ce repas (ex. 2 tranches de pain pour un sandwich),
+//           first = prendre le premier aliment permis de la liste (ex. du lait, et la boisson de soya seulement sans lait)
+const MILK = ['lait', 'boisson_soya'];
+const CUP = 258; // 1 tasse (250 ml) de lait
 export const TEMPLATES = [
   // --- Déjeuners ---
-  { id: 'gruau', label: 'gruau protéiné aux fruits et noix', need: 'carb', slots: ['dej'], name: 'Gruau protéiné,', show: ['fruit', 'fat'], items: [
-    ['carb', ['avoine', 'avoine_sg', 'creme_ble']], ['protein', ['yogourt', 'whey', 'vegprot']],
+  { id: 'gruau', label: 'gruau protéiné au lait, fruits et noix', need: 'carb', slots: ['dej'], name: 'Gruau protéiné,', show: ['fruit', 'fat'], items: [
+    ['carb', ['avoine', 'avoine_sg', 'creme_ble']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['yogourt', 'whey', 'vegprot']],
     ['fruit', ['bleuets', 'fraises', 'framboises', 'banane', 'pomme', 'poire']], ['fat', ['amandes', 'grenoble', 'arachide', 'beurre_amande', 'cajou']]] },
   { id: 'oeufs_roties', label: 'œufs, rôties (ou bagel) et fruit', slots: ['dej'], name: 'Déjeuner', show: ['protein', 'carb', 'fruit'], items: [
     ['protein', ['oeufs']], ['carb', ['pain', 'muffin_anglais', 'bagel']],
@@ -64,16 +70,23 @@ export const TEMPLATES = [
   { id: 'bol_yogourt', label: 'bol de yogourt grec, céréales ou gruau, fruits et noix', slots: ['dej'], name: 'Bol de', show: ['protein', 'carb', 'fruit'], items: [
     ['protein', ['yogourt']], ['carb', ['cereales', 'avoine']],
     ['fruit', ['bleuets', 'fraises', 'framboises', 'mangue', 'banane', 'ananas']], ['fat', ['amandes', 'grenoble', 'cajou', 'arachide']]] },
-  { id: 'smoothie', label: 'smoothie protéiné aux fruits et beurre d’arachide', need: 'fruit', slots: ['dej'], name: 'Smoothie', show: ['fruit', 'protein', 'fat'], items: [
-    ['fruit', ['banane', 'fraises', 'bleuets', 'mangue', 'ananas', 'framboises']], ['protein', ['whey', 'vegprot', 'yogourt']],
-    ['carb', ['avoine']], ['fat', ['arachide', 'beurre_amande']]] },
+  { id: 'smoothie', label: 'smoothie : lait, banane ou petits fruits, whey et beurre d’arachide', need: 'fruit', slots: ['dej'], name: 'Smoothie', show: ['fruit', 'protein', 'fat'], items: [
+    ['fruit', ['banane', 'fraises', 'bleuets', 'mangue', 'framboises']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['whey', 'vegprot', 'yogourt']],
+    ['carb', ['avoine'], { max: 40 }], ['fat', ['arachide', 'beurre_amande']]] },
   { id: 'bagel_arachide', label: 'bagel au beurre d’arachide, yogourt ou shake et fruit', need: 'carb', slots: ['dej'], name: 'Bagel au', show: ['fat', 'protein', 'fruit'], items: [
     ['carb', ['bagel']], ['fat', ['arachide', 'beurre_amande']], ['protein', ['yogourt', 'whey', 'vegprot']], ['fruit', ['banane', 'pomme', 'fraises']]] },
-  { id: 'quebecois', label: 'déjeuner québécois : œufs, fèves au lard et fruit', slots: ['dej'], name: 'Déjeuner québécois :', show: ['protein', 'carb', 'fruit'], items: [
-    ['protein', ['oeufs']], ['carb', ['feves_lard']], ['fruit', ['orange', 'cantaloup', 'fraises']]] },
+  { id: 'quebecois', label: 'déjeuner québécois : œufs, rôties, fèves au lard et fruit', slots: ['dej'], name: 'Déjeuner québécois :', show: ['protein', 'carb', 'veg'], items: [
+    ['protein', ['oeufs'], { max: 150 }], ['carb', ['pain'], { min: 70 }], ['veg', ['feves_lard'], { fixed: 125 }], ['fruit', ['orange', 'cantaloup', 'fraises']]] },
+  { id: 'cereales', label: 'bol de céréales et lait, yogourt grec et fruit', need: 'carb', slots: ['dej'], name: 'Céréales et lait,', show: ['protein', 'fruit'], items: [
+    ['carb', ['cereales']], ['milk', MILK, { fixed: CUP, first: true }], ['protein', ['yogourt']], ['fruit', ['banane', 'bleuets', 'fraises']]] },
   { id: 'muffin_oeuf', label: 'muffin anglais œuf (ou jambon) et cheddar, fruit', need: 'carb', slots: ['dej'], name: 'Muffin anglais :', show: ['protein', 'fat', 'fruit'], items: [
     ['carb', ['muffin_anglais']], ['protein', ['oeufs', 'jambon']], ['fat', ['cheddar']], ['fruit', ['orange', 'pomme', 'kiwi']]] },
   // --- Dîners et soupers ---
+  { id: 'sandwich', label: 'sandwich (jambon, dinde, poulet, thon ou œufs), fromage et crudités', need: 'carb', slots: ['din'], name: 'Sandwich', show: ['protein', 'fat'], items: [
+    ['carb', ['pain'], { min: 70, max: 70 }], ['protein', ['jambon', 'dinde', 'poulet', 'thon', 'oeufs']],
+    ['veg', ['salade', 'tomates', 'concombre', 'carottes']], ['fat', ['cheddar', 'mozza', 'avocat']]] },
+  { id: 'pate_chinois', label: 'pâté chinois (bœuf haché, maïs, pommes de terre)', need: 'carb', slots: ['din', 'sou'], name: 'Pâté chinois', show: [], items: [
+    ['protein', ['boeuf_maigre', 'boeuf', 'dinde_hachee']], ['veg', ['mais'], { fixed: 125 }], ['carb', ['patate']], ['fat', ['beurre']]] },
   { id: 'bol', label: 'bol protéine, riz ou quinoa et légumes', slots: ['din', 'sou'], name: 'Bol', show: ['protein', 'carb', 'veg'], items: [
     ['protein', ['poulet', 'cuisse_poulet', 'dinde', 'tofu', 'crevettes']], ['carb', ['riz', 'riz_brun', 'quinoa']],
     ['veg', ['brocoli', 'legumes', 'poivron', 'chou_fleur', 'haricots', 'epinards']], ['fat', ['huile', 'huile_canola', 'avocat', 'cajou']]] },
@@ -117,6 +130,10 @@ export const TEMPLATES = [
     ['carb', ['galette_riz']], ['protein', ['ficelle', 'yogourt', 'whey']], ['fruit', ['pomme', 'banane', 'fraises']]] },
   { id: 'craquelins', label: 'craquelins, thon ou fromage et fruit', slots: ['col'], name: '', show: ['carb', 'protein', 'fruit'], items: [
     ['carb', ['craquelins']], ['protein', ['thon', 'ficelle']], ['fruit', ['raisins', 'pomme']]] },
+  { id: 'roties_arachide', label: 'rôtie au beurre d’arachide et banane', need: 'carb', slots: ['col'], name: 'Rôtie au', show: ['fat', 'fruit'], items: [
+    ['carb', ['pain'], { fixed: 35 }], ['fat', ['arachide', 'beurre_amande'], { fixed: 16 }], ['fruit', ['banane', 'pomme']]] },
+  { id: 'cereales_col', label: 'céréales et lait', need: 'carb', slots: ['col'], name: 'Céréales et lait,', show: ['fruit'], items: [
+    ['carb', ['cereales']], ['milk', MILK, { fixed: CUP, first: true }], ['fruit', ['banane', 'bleuets', 'fraises']]] },
   { id: 'apres_entrainement', label: 'lait au chocolat et banane après l’entraînement', need: 'carb', slots: ['col'], name: 'Après l’entraînement :', show: ['carb', 'fruit'], items: [
     ['carb', ['lait_choco']], ['fruit', ['banane']]] },
 ];
@@ -137,18 +154,27 @@ export function mealName(meal, items) {
 
 // Choisit un modèle pour un repas (différent de ceux déjà servis dans la journée si possible), puis un aliment par rôle
 // (en évitant de répéter un aliment déjà utilisé ailleurs dans la journée). null si aucun modèle ne convient.
+// Les légumineuses (lentilles, pois chiches…) ont trop peu de protéines pour être la base d'un dîner ou d'un souper
+// de quelqu'un qui mange de la viande ou du poisson : chez lui, le curry et le chili se font au poulet, au bœuf ou au tofu.
+const VEGGIE_DIETS = ['vegetarien', 'vegetalien'];
 function pickFromTemplate(slot, prefs, rand, used, usedTpl, avoidTpl = null) {
-  const options = (ids) => affordable(ids.map((id) => FOOD_BY_ID[id]).filter((f) => f && allowed(f, prefs)), prefs);
-  const ok = TEMPLATES.filter((t) => t.slots.includes(slotKey(slot)) && t.items.every(([, ids]) => options(ids).length));
+  const main = !isSnack(slot) && slot !== 'dej';
+  const options = (ids, role) => {
+    const all = affordable(ids.map((id) => FOOD_BY_ID[id]).filter((f) => f && allowed(f, prefs)), prefs);
+    if (role !== 'protein' || !main || VEGGIE_DIETS.includes(prefs.diet)) return all;
+    const noLegume = all.filter((f) => !f.legume);
+    return noLegume.length ? noLegume : all;
+  };
+  const ok = TEMPLATES.filter((t) => t.slots.includes(slotKey(slot)) && t.items.every(([role, ids]) => options(ids, role).length));
   const fresh = ok.filter((t) => !usedTpl.has(t.id) && t.id !== avoidTpl);
   const pool = fresh.length ? fresh : ok.filter((t) => t.id !== avoidTpl).length ? ok.filter((t) => t.id !== avoidTpl) : ok;
   if (!pool.length) return null;
   const t = pool[Math.floor(rand() * pool.length)];
   usedTpl.add(t.id);
-  const items = t.items.map(([role, ids]) => {
-    const all = options(ids);
+  const items = t.items.map(([role, ids, opt = {}]) => {
+    const all = options(ids, role);
     const freshFoods = all.filter((f) => !used.has(f.id));
-    const food = (freshFoods.length ? freshFoods : all)[Math.floor(rand() * (freshFoods.length || all.length))];
+    const food = opt.first ? all[0] : (freshFoods.length ? freshFoods : all)[Math.floor(rand() * (freshFoods.length || all.length))];
     used.add(food.id);
     return { role, food: food.id };
   });
@@ -257,7 +283,8 @@ const KEY = { protein: 'p', carb: 'c', fat: 'f' };
 // « Une vraie portion ou rien » : un féculent (ou la protéine d'une collation) dont il ne faudrait qu'une miette
 // est retiré plutôt que servi en quantité ridicule (ex. souper sans féculent en sèche, collation = un fruit).
 // La protéine d'un repas principal, elle, garde toujours au moins sa portion minimale.
-const droppable = (it, snack) => it.role === 'carb' || (snack && it.role === 'protein');
+// L'aliment qui donne son nom au repas (need : l'avoine d'un gruau, les céréales de « céréales et lait »…) n'est jamais retiré.
+const droppable = (it, snack) => !it.keep && (it.role === 'carb' || (snack && it.role === 'protein'));
 function solve(items, target, keys, snack = false) {
   const q = items.map((it) => it.fixed ?? 0);
   const vars = items.map((it, i) => i).filter((i) => items[i].fixed == null);
@@ -268,8 +295,8 @@ function solve(items, target, keys, snack = false) {
       const others = items.reduce((s, it, j) => (j === i ? s : s + (it.food.per100[key] * q[j]) / 100), 0);
       const per = items[i].food.per100[key] / 100;
       const raw = (target[key] - others) / per;
-      const lo = minG(items[i].food);
-      q[i] = per <= 0 ? 0 : droppable(items[i], snack) && raw < lo / 2 ? 0 : Math.min(items[i].food.max ?? 600, Math.max(lo, raw));
+      const lo = minG(items[i].food, items[i]);
+      q[i] = per <= 0 ? 0 : droppable(items[i], snack) && raw < lo / 2 ? 0 : Math.min(maxG(items[i].food, items[i].role, items[i]), Math.max(lo, raw));
     }
   }
   // Si les plafonds de portions laissent le repas sous sa cible de calories, on complète avec glucides puis lipides.
@@ -280,7 +307,7 @@ function solve(items, target, keys, snack = false) {
       const i = items.findIndex((it) => it.role === role);
       if (i < 0 || short < 40 || (q[i] === 0 && droppable(items[i], snack))) continue; // un féculent retiré le reste
       const kpg = items[i].food.per100.k / 100;
-      const room = (items[i].food.max ?? 600) - q[i];
+      const room = maxG(items[i].food, items[i].role, items[i]) - q[i];
       const add = Math.max(0, Math.min(room, short / kpg));
       q[i] += add;
       short -= add * kpg;
@@ -313,6 +340,7 @@ export function qtyText(item) {
   if (item.units != null) {
     const label = item.units > 1 ? f.unit.p : f.unit.n;
     const shown = Number.isInteger(item.units) ? item.units : String(item.units).replace('.', ',');
+    if (f.liquid) return `${shown} ${label}`; // « 1 tasse (250 ml) », sans les grammes
     return `${shown} ${label} (${Math.round(item.g)} g)`;
   }
   return `${item.g} g`;
@@ -329,24 +357,27 @@ export function computeDay(targets, choices, prefs = {}) {
     // Si un aliment choisi a depuis été retiré de la liste (mise à jour de l'app), on l'ignore plutôt que
     // de faire planter l'affichage : le repas se recalcule avec ce qu'il reste, quitte à être un peu à côté
     // jusqu'à ce que la personne touche « Autre repas » ou change ses préférences.
+    const tplItems = TEMPLATE_BY_ID[meal.tpl]?.items || [];
     const items = meal.items.map((it) => {
       const food = resolveFood(it.food, it.custom);
       if (!food) return null;
-      let fixed = null;
-      if (it.role === 'veg') fixed = VEG_GRAMS;
-      if (it.role === 'fruit') fixed = food.unit ? food.unit.g : 100;
-      return { role: it.role, food, fixed };
+      const opt = tplItems.find(([role]) => role === it.role)?.[2] || {};
+      let fixed = opt.fixed ?? null;
+      if (fixed == null && it.role === 'veg') fixed = VEG_GRAMS;
+      if (fixed == null && it.role === 'fruit') fixed = food.unit ? food.unit.g : 100;
+      if (fixed == null && it.role === 'milk') fixed = CUP;
+      return { role: it.role, food, fixed, min: opt.min, max: opt.max, keep: TEMPLATE_BY_ID[meal.tpl]?.need === it.role };
     }).filter(Boolean);
     const q = solve(items, T, keys, isSnack(meal.slot));
     const built = items.map((it, i) => {
       const p = practical(it.food, q[i], it.role);
-      return { role: it.role, food: it.food, g: p.g, units: p.units ?? null, macros: macrosOf(it.food, p.g) };
+      return { role: it.role, food: it.food, g: p.g, units: p.units ?? null, macros: macrosOf(it.food, p.g), min: it.min, max: it.max, fixed: it.fixed != null };
     });
     // Si un aliment plafonne (ex. lentilles) et qu'il manque des protéines, on ajoute un complément protéiné.
     if (keys.includes('p')) {
       const short = T.p - built.reduce((s, it) => s + it.macros.p, 0);
       if (short > 10 && short > T.p * 0.15) {
-        const sup = FOODS.find((f) => f.supplement && allowed(f, prefs) && !built.some((b) => b.food.id === f.id));
+        const sup = FOODS.find((f) => f.supplement && f.slots.includes(slotKey(meal.slot)) && allowed(f, prefs) && !built.some((b) => b.food.id === f.id));
         if (sup) {
           const g = Math.min(sup.max, Math.max(minG(sup) || 15, (short / sup.per100.p) * 100));
           const p = practical(sup, g, 'protein');
@@ -395,6 +426,9 @@ function finishDay(mealsOut, targets, prefs = {}) {
   for (const key of ['p', 'c', 'f']) {
     let residual = targets[TARGET_KEY[key]] - mealsOut.reduce((s, m) => add(s, m.totals), ZERO)[key];
     if (Math.abs(residual) < 1.5) continue;
+    // Protéines en trop : on laisse faire (c'est un minimum). Les réduire vidait la viande d'un repas pour compenser
+    // les protéines du riz ou de l'avoine ailleurs (ex. dîner à 26 g de protéines).
+    if (key === 'p' && residual < 0) continue;
     // Tous les aliments ajustables (quantité continue) pour ce macro, du plus de marge au moins de marge :
     // si un seul ne suffit pas à absorber l'écart (plafond atteint), on complète avec le suivant.
     // Glucides en trop peu : on grossit d'abord les fruits (1 fruit de plus au déjeuner ou en collation, c'est
@@ -402,17 +436,17 @@ function finishDay(mealsOut, targets, prefs = {}) {
     const roles = key === 'c' && residual > 0 ? ['fruit', 'carb'] : [ROLE_OF_MACRO[key]];
     const candidates = [];
     for (const m of mealsOut) for (const it of m.items) {
-      if (!roles.includes(it.role) || it.extra || it.g <= 0 || (it.food.unit && it.food.unit.whole && it.role !== 'fruit')) continue;
-      const room = residual > 0 ? maxG(it.food, it.role) - it.g : it.g - minG(it.food);
+      if (!roles.includes(it.role) || it.extra || (it.fixed && it.role !== 'fruit') || it.g <= 0 || (it.food.unit && it.food.unit.whole && it.role !== 'fruit')) continue;
+      const room = residual > 0 ? maxG(it.food, it.role, it) - it.g : it.g - minG(it.food, it);
       if (room > 3) candidates.push({ meal: m, item: it });
     }
-    const rank = (c) => roles.indexOf(c.item.role) * 10000 - (residual > 0 ? maxG(c.item.food, c.item.role) - c.item.g : c.item.g);
+    const rank = (c) => roles.indexOf(c.item.role) * 10000 - (residual > 0 ? maxG(c.item.food, c.item.role, c.item) - c.item.g : c.item.g);
     candidates.sort((a, b) => rank(a) - rank(b));
     for (const { meal, item } of candidates) {
       if (Math.abs(residual) < 1.5) break;
       const per = item.food.per100[key] / 100;
       if (per <= 0) continue;
-      const room = residual > 0 ? maxG(item.food, item.role) - item.g : item.g - minG(item.food);
+      const room = residual > 0 ? maxG(item.food, item.role, item) - item.g : item.g - minG(item.food, item);
       const deltaG = Math.max(-room, Math.min(room, residual / per));
       const before = item.macros[key];
       const p = practical(item.food, item.g + deltaG, item.role);
@@ -422,10 +456,11 @@ function finishDay(mealsOut, targets, prefs = {}) {
     }
     // Tout est déjà à son plafond mais il manque encore beaucoup : ajoute un aliment de plus.
     // Il est ajouté à un repas où il a sa place (pas d'avoine au souper), de préférence un repas qui n'a pas déjà
-    // reçu un ajout, et en commençant par le plus petit repas pour répartir les portions.
+    // reçu un ajout du même type, d'abord une collation (plutôt que d'alourdir une assiette), puis le plus petit repas.
     while (residual > 30) {
       const used = new Set(mealsOut.flatMap((m) => m.items.map((it) => it.food.id)));
-      const order = [...mealsOut].sort((a, b) => (a.items.some((i) => i.extra) - b.items.some((i) => i.extra))
+      const hasExtra = (m) => m.items.some((i) => i.extra && i.role === ROLE_OF_MACRO[key]);
+      const order = [...mealsOut].sort((a, b) => (hasExtra(a) - hasExtra(b))
         || (isSnack(b.slot) - isSnack(a.slot)) || a.totals.k - b.totals.k);
       let meal = null, extra = null;
       for (const m of order) {
@@ -455,16 +490,16 @@ function finishDay(mealsOut, targets, prefs = {}) {
     if (Math.abs(kResidual) < 15) break;
     const candidates = [];
     for (const m of mealsOut) for (const it of m.items) {
-      if (it.role !== role || it.g <= 0 || (it.food.unit && it.food.unit.whole)) continue;
-      const room = kResidual > 0 ? (it.food.max ?? 600) - it.g : it.g - minG(it.food);
+      if (it.role !== role || it.fixed || it.g <= 0 || (it.food.unit && it.food.unit.whole)) continue;
+      const room = kResidual > 0 ? maxG(it.food, it.role, it) - it.g : it.g - minG(it.food, it);
       if (room > 2) candidates.push({ meal: m, item: it });
     }
-    candidates.sort((a, b) => (kResidual > 0 ? (b.item.food.max ?? 600) - b.item.g - ((a.item.food.max ?? 600) - a.item.g) : b.item.g - a.item.g));
+    candidates.sort((a, b) => (kResidual > 0 ? maxG(b.item.food, b.item.role, b.item) - b.item.g - (maxG(a.item.food, a.item.role, a.item) - a.item.g) : b.item.g - a.item.g));
     for (const { meal, item } of candidates) {
       if (Math.abs(kResidual) < 15) break;
       const per = item.food.per100.k / 100;
       if (per <= 0) continue;
-      const room = kResidual > 0 ? (item.food.max ?? 600) - item.g : item.g - minG(item.food);
+      const room = kResidual > 0 ? maxG(item.food, item.role, item) - item.g : item.g - minG(item.food, item);
       const deltaG = Math.max(-room, Math.min(room, kResidual / per));
       const beforeK = item.macros.k;
       const p = practical(item.food, item.g + deltaG, item.role);
@@ -483,6 +518,7 @@ export function groceryList(computed, days = 7) {
     acc[it.food.id].g += it.g * days;
   }));
   return Object.values(acc).map(({ food, g }) => {
+    if (food.liquid) return { name: food.name, text: `${String(Math.round(g / 250) / 4).replace('.', ',')} L`, brands: food.brands };
     if (food.id === 'avocat') return { name: food.name, text: `${Math.ceil(g / 150)} ×`, brands: food.brands };
     if (food.unit && food.unit.whole && food.unit.g > 5) return { name: food.name, text: `${Math.round(g / food.unit.g)} ×`, brands: food.brands };
     if (food.external) return { name: food.name, text: `≈ ${Math.round(g / 50) * 50} g`, brands: food.brands };

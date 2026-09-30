@@ -4,7 +4,7 @@
 // sans gluten : valeurs d'étiquettes courantes).
 // Les marques sont des EXEMPLES courants au Québec : les valeurs varient selon la marque, vérifie l'étiquette.
 // Pour ajouter un aliment : ajoute une ligne dans FOODS.
-//   role   : protein | carb | fat | fruit | veg
+//   role   : protein | carb | fat | fruit | veg | milk (lait ou boisson végétale, 1 tasse)
 //   slots  : repas où il peut apparaître (dej = déjeuner, din = dîner, sou = souper, col = collation)
 //   max    : quantité maximale raisonnable par repas, en grammes
 //   animal : meat | fish | dairy | egg (sert aux régimes végétarien / végétalien / pescétarien)
@@ -15,6 +15,8 @@
 //   short  : nom court pour nommer un repas (« Bol poulet, riz et brocoli »)
 //   cost   : prix relatif, 1 = économique, 2 = moyen, 3 = cher (budget « serré » : on évite les 3)
 //   min    : plus petite portion qui a du sens dans une assiette
+//   legume : légumineuse (base d'un repas seulement pour les végétariens : trop peu de protéines pour les autres)
+//   liquid : se compte en litres dans la liste d'épicerie
 export const ALLERGENS = {
   arachide: 'Arachides', noix: 'Noix / fruits à coque', lait: 'Lait / lactose', oeuf: 'Œufs', gluten: 'Gluten (blé)',
   soya: 'Soya', poisson: 'Poisson', crustaces: 'Fruits de mer', sesame: 'Sésame',
@@ -70,17 +72,17 @@ export const FOODS = [
   F('oeufs', 'Œufs entiers', 'protein', ['dej', 'din', 'sou', 'col'], 141, 11.8, 1.9, 10, { short: 'œufs', cost: 1, min: 100, max: 250, animal: 'egg', allergens: ['oeuf'], unit: { n: 'œuf', p: 'œufs', g: 50, whole: true }, kw: ['oeuf'], brands: 'Burnbrae Farms, Nutri, œufs de catégorie A' }),
   F('yogourt', 'Yogourt grec nature 0 %', 'protein', ['dej', 'col'], 58, 10.5, 3.2, 0, { short: 'yogourt grec', cost: 2, min: 150, max: 400, animal: 'dairy', allergens: ['lait'], kw: ['yogourt', 'yaourt', 'yogurt'], brands: 'Oikos, Iögo, Liberté, Astro' }),
   F('ficelle', 'Fromage ficelle (mozzarella)', 'protein', ['col'], 254, 24.3, 2.8, 15.9, { short: 'fromage ficelle', cost: 2, min: 21, max: 63, animal: 'dairy', allergens: ['lait'], unit: { n: 'bâtonnet', p: 'bâtonnets', g: 21, whole: true }, kw: ['fromage', 'ficelle', 'mozzarella'], brands: 'Black Diamond, Ficello, marque de l’épicerie' }),
-  F('whey', 'Poudre de protéines (whey)', 'protein', ['dej', 'col'], 400, 80, 10, 5, { short: 'protéines en poudre', cost: 2, min: 30, max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
+  F('whey', 'Whey', 'protein', ['dej', 'col'], 400, 80, 10, 5, { short: 'whey', cost: 2, min: 30, max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
   F('vegprot', 'Poudre de protéines végétales (pois/riz)', 'protein', ['dej', 'col'], 380, 75, 8, 6, { short: 'protéines végétales en poudre', cost: 3, min: 30, max: 60, supplement: true, unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['poudre', 'proteine', 'vegetale'], brands: 'Vega Sport, Sunwarrior, Garden of Life' }),
   F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { short: 'tofu', cost: 1, min: 100, max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
-  F('lentilles', 'Lentilles cuites', 'protein', ['din', 'sou'], 116, 9, 20.1, 0.4, { short: 'lentilles', cost: 1, min: 120, max: 200, kw: ['lentille', 'legumineuse'], brands: 'en conserve (ex. Unico, Kirkland) ou sèches' }),
-  F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 121, 8.1, 20.8, 0.9, { short: 'haricots rouges', cost: 1, min: 120, max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve, égouttés et rincés (ex. Unico, Kirkland, Irresistibles)' }),
-  F('haricots_noirs', 'Haricots noirs cuits', 'protein', ['din', 'sou'], 132, 8.9, 23.7, 0.5, { short: 'haricots noirs', cost: 1, min: 120, max: 250, kw: ['haricot noir', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
-  F('pois_chiches', 'Pois chiches cuits', 'protein', ['din', 'sou'], 138, 7, 22.9, 2.5, { short: 'pois chiches', cost: 1, min: 120, max: 250, kw: ['pois chiche', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
+  F('lentilles', 'Lentilles cuites', 'protein', ['din', 'sou'], 116, 9, 20.1, 0.4, { short: 'lentilles', cost: 1, legume: true, min: 120, max: 200, kw: ['lentille', 'legumineuse'], brands: 'en conserve (ex. Unico, Kirkland) ou sèches' }),
+  F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 121, 8.1, 20.8, 0.9, { short: 'haricots rouges', cost: 1, legume: true, min: 120, max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve, égouttés et rincés (ex. Unico, Kirkland, Irresistibles)' }),
+  F('haricots_noirs', 'Haricots noirs cuits', 'protein', ['din', 'sou'], 132, 8.9, 23.7, 0.5, { short: 'haricots noirs', cost: 1, legume: true, min: 120, max: 250, kw: ['haricot noir', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
+  F('pois_chiches', 'Pois chiches cuits', 'protein', ['din', 'sou'], 138, 7, 22.9, 2.5, { short: 'pois chiches', cost: 1, legume: true, min: 120, max: 250, kw: ['pois chiche', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
 
   // ---------- Glucides (féculents) ----------
-  F('avoine', 'Flocons d’avoine (secs)', 'carb', ['dej'], 388, 13.3, 66.7, 7.2, { short: 'gruau', cost: 1, min: 30, max: 160, allergens: ['gluten'], kw: ['avoine', 'gruau'], brands: 'Quaker, Nature’s Path' }),
-  F('avoine_sg', 'Flocons d’avoine sans gluten (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { short: 'gruau', cost: 2, gf: true, min: 30, max: 120, kw: ['avoine', 'gruau'], brands: 'Bob’s Red Mill (certifiés sans gluten), Nature’s Path' }),
+  F('avoine', 'Flocons d’avoine (secs)', 'carb', ['dej'], 388, 13.3, 66.7, 7.2, { short: 'gruau', cost: 1, min: 30, max: 100, allergens: ['gluten'], kw: ['avoine', 'gruau'], brands: 'Quaker, Nature’s Path' }),
+  F('avoine_sg', 'Flocons d’avoine sans gluten (secs)', 'carb', ['dej'], 379, 13, 68, 6.5, { short: 'gruau', cost: 2, gf: true, min: 30, max: 100, kw: ['avoine', 'gruau'], brands: 'Bob’s Red Mill (certifiés sans gluten), Nature’s Path' }),
   F('creme_ble', 'Crème de blé (sèche)', 'carb', ['dej'], 382, 13.2, 77.1, 1.2, { short: 'crème de blé', cost: 1, min: 30, max: 100, allergens: ['gluten'], kw: ['creme de ble', 'ble'], brands: 'Crème de blé (B&G), marque de l’épicerie' }),
   F('cereales', 'Céréales d’avoine (type Cheerios)', 'carb', ['dej'], 397, 12.9, 72.7, 6.3, { short: 'céréales', cost: 2, min: 30, max: 90, allergens: ['gluten'], kw: ['cereale', 'cheerios', 'avoine'], brands: 'Cheerios, marque de l’épicerie' }),
   F('pain', 'Pain de blé entier', 'carb', ['dej'], 257, 10.7, 45.6, 3, { short: 'rôties', cost: 1, min: 35, max: 105, allergens: ['gluten'], unit: { n: 'tranche', p: 'tranches', g: 35, whole: true }, kw: ['pain', 'ble', 'roties'], brands: 'Dempster’s, Bon Matin, Kirkland' }),
@@ -88,21 +90,25 @@ export const FOODS = [
   F('muffin_anglais', 'Muffin anglais de blé', 'carb', ['dej'], 223, 8.7, 44.8, 2, { short: 'muffin anglais', cost: 1, min: 57, max: 114, allergens: ['gluten'], unit: { n: 'muffin anglais', p: 'muffins anglais', g: 57, whole: true }, kw: ['muffin', 'ble'], brands: 'Dempster’s, Weston' }),
   F('tortilla', 'Tortilla de blé (grande)', 'carb', ['din', 'sou'], 325, 8.7, 55.6, 7.1, { short: 'tortilla', cost: 1, min: 70, max: 140, allergens: ['gluten'], unit: { n: 'tortilla', p: 'tortillas', g: 70, whole: true }, kw: ['tortilla', 'wrap', 'ble'], brands: 'Old El Paso, Dempster’s, Mission' }),
   F('pita', 'Pain pita de blé entier', 'carb', ['din', 'sou'], 266, 9.8, 55, 2.6, { short: 'pita', cost: 1, min: 64, max: 128, allergens: ['gluten'], unit: { n: 'pita', p: 'pitas', g: 64, whole: true }, kw: ['pita', 'pain', 'ble'], brands: 'Pita Break, marque de l’épicerie' }),
-  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28.2, 0.3, { short: 'riz', cost: 1, min: 100, max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 111, 2.6, 23, 0.9, { short: 'riz brun', cost: 1, min: 100, max: 400, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
-  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 30.9, 0.9, { short: 'pâtes', cost: 1, min: 100, max: 400, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
-  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { short: 'pâtes', cost: 2, gf: true, min: 100, max: 400, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
-  F('nouilles_riz', 'Nouilles de riz cuites', 'carb', ['din', 'sou'], 108, 1.8, 24, 0.2, { short: 'nouilles de riz', cost: 2, min: 100, max: 350, kw: ['nouille', 'riz'], brands: 'Thai Kitchen, Sun-Luck' }),
-  F('couscous', 'Couscous cuit', 'carb', ['din', 'sou'], 112, 3.8, 23.2, 0.2, { short: 'couscous', cost: 1, min: 100, max: 350, allergens: ['gluten'], kw: ['couscous', 'ble'], brands: 'Casbah, marque de l’épicerie' }),
+  F('riz', 'Riz blanc cuit', 'carb', ['din', 'sou'], 130, 2.7, 28.2, 0.3, { short: 'riz', cost: 1, min: 100, max: 300, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('riz_brun', 'Riz brun cuit', 'carb', ['din', 'sou'], 111, 2.6, 23, 0.9, { short: 'riz brun', cost: 1, min: 100, max: 300, kw: ['riz'], brands: 'Sun-Rice, Ben’s Original, Kirkland' }),
+  F('pates', 'Pâtes cuites', 'carb', ['din', 'sou'], 158, 5.8, 30.9, 0.9, { short: 'pâtes', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['pate', 'spaghetti'], brands: 'Barilla, Catelli, Kirkland' }),
+  F('pates_sg', 'Pâtes sans gluten cuites (riz/maïs)', 'carb', ['din', 'sou'], 150, 3, 32, 1, { short: 'pâtes', cost: 2, gf: true, min: 100, max: 300, kw: ['pate', 'spaghetti'], brands: 'Barilla sans gluten, Catelli sans gluten' }),
+  F('nouilles_riz', 'Nouilles de riz cuites', 'carb', ['din', 'sou'], 108, 1.8, 24, 0.2, { short: 'nouilles de riz', cost: 2, min: 100, max: 300, kw: ['nouille', 'riz'], brands: 'Thai Kitchen, Sun-Luck' }),
+  F('couscous', 'Couscous cuit', 'carb', ['din', 'sou'], 112, 3.8, 23.2, 0.2, { short: 'couscous', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['couscous', 'ble'], brands: 'Casbah, marque de l’épicerie' }),
   F('orge', 'Orge perlé cuit', 'carb', ['din', 'sou'], 123, 2.3, 28.2, 0.4, { short: 'orge', cost: 1, min: 100, max: 300, allergens: ['gluten'], kw: ['orge'], brands: 'marque de l’épicerie' }),
-  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21.3, 1.9, { short: 'quinoa', cost: 2, min: 100, max: 350, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
-  F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20.1, 0.1, { short: 'pommes de terre', cost: 1, min: 150, max: 500, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
-  F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 20.7, 0.1, { short: 'patate douce', cost: 1, min: 150, max: 450, kw: ['patate douce'], brands: 'fraîche' }),
+  F('quinoa', 'Quinoa cuit', 'carb', ['din', 'sou'], 120, 4.4, 21.3, 1.9, { short: 'quinoa', cost: 2, min: 100, max: 300, kw: ['quinoa'], brands: 'Ancient Harvest, Kirkland, Irresistibles' }),
+  F('patate', 'Pomme de terre cuite', 'carb', ['din', 'sou'], 87, 1.9, 20.1, 0.1, { short: 'pommes de terre', cost: 1, min: 150, max: 400, kw: ['patate', 'pomme de terre'], brands: 'n’importe laquelle (fraîche)' }),
+  F('patate_douce', 'Patate douce cuite', 'carb', ['din', 'sou'], 90, 2, 20.7, 0.1, { short: 'patate douce', cost: 1, min: 150, max: 400, kw: ['patate douce'], brands: 'fraîche' }),
   F('mais', 'Maïs en grains cuit', 'carb', ['din', 'sou'], 96, 3.4, 21, 1.5, { short: 'maïs', cost: 1, min: 80, max: 250, kw: ['mais'], brands: 'surgelé ou en conserve (ex. Green Giant, Del Monte)' }),
   F('feves_lard', 'Fèves au lard végétariennes (conserve)', 'carb', ['dej', 'din'], 94, 4.8, 21.1, 0.4, { short: 'fèves au lard', cost: 1, min: 120, max: 250, kw: ['feve', 'haricot', 'legumineuse'], brands: 'Clark végétariennes, Heinz' }),
   F('galette_riz', 'Galettes de riz', 'carb', ['col'], 387, 8.2, 81.5, 2.8, { short: 'galettes de riz', cost: 1, min: 9, max: 36, unit: { n: 'galette', p: 'galettes', g: 9, whole: true }, kw: ['galette', 'riz'], brands: 'Quaker, Suzie’s' }),
   F('craquelins', 'Craquelins de blé entier', 'carb', ['col'], 427, 10.6, 69.5, 14.1, { short: 'craquelins', cost: 2, min: 20, max: 60, allergens: ['gluten'], kw: ['craquelin', 'ble'], brands: 'Triscuit, Breton' }),
   F('lait_choco', 'Lait au chocolat 2 %', 'carb', ['col'], 77, 3, 12.1, 1.9, { short: 'lait au chocolat', cost: 1, min: 258, max: 516, animal: 'dairy', allergens: ['lait'], unit: { n: 'tasse (250 ml)', p: 'tasses (250 ml)', g: 258, whole: true }, kw: ['lait', 'chocolat'], brands: 'Natrel, Québon' }),
+
+  // ---------- Lait (1 tasse dans un smoothie, un gruau, des céréales) ----------
+  F('lait', 'Lait 2 %', 'milk', ['dej', 'col'], 50, 3.4, 4.9, 2, { short: 'lait', cost: 1, liquid: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'tasse (250 ml)', p: 'tasses (250 ml)', g: 258, whole: true }, kw: ['lait'], brands: 'Natrel, Québon, Lactantia' }),
+  F('boisson_soya', 'Boisson de soya enrichie', 'milk', ['dej', 'col'], 39, 2.7, 3.1, 1.6, { short: 'boisson de soya', cost: 2, liquid: true, allergens: ['soya'], unit: { n: 'tasse (250 ml)', p: 'tasses (250 ml)', g: 258, whole: true }, kw: ['soya', 'boisson vegetale'], brands: 'Silk, Natura, So Nice' }),
 
   // ---------- Lipides ----------
   F('huile', 'Huile d’olive', 'fat', ['din', 'sou'], 885, 0, 0, 100, { short: 'huile d’olive', cost: 2, max: 20, unit: { n: 'c. à thé', p: 'c. à thé', g: 5, whole: true }, kw: ['huile', 'olive'], brands: 'Bertolli, Filippo Berio, Kirkland' }),
