@@ -9,6 +9,7 @@
 //   max    : quantité maximale raisonnable par repas, en grammes
 //   animal : meat | fish | dairy | egg (sert aux régimes végétarien / végétalien / pescétarien)
 //   pork   : true pour le porc (régime « sans porc »)
+//   vegOnly : offert seulement aux végétariens et végétaliens (ex. tofu)
 //   allergens : arachide, noix, lait, oeuf, gluten, soya, poisson, crustaces, sesame
 //   unit   : { n: nom, p: pluriel, g: grammes par unité, whole: unités entières seulement }
 //   kw     : mots-clés pour reconnaître ce que la personne n'aime pas
@@ -77,7 +78,7 @@ export const FOODS = [
   F('ficelle', 'Fromage ficelle (mozzarella)', 'protein', ['col'], 254, 24.3, 2.8, 15.9, { common: true, short: 'fromage ficelle', cost: 2, min: 21, max: 63, animal: 'dairy', allergens: ['lait'], unit: { n: 'bâtonnet', p: 'bâtonnets', g: 21, whole: true }, kw: ['fromage', 'ficelle', 'mozzarella'], brands: 'Black Diamond, Ficello, marque de l’épicerie' }),
   F('whey', 'Whey', 'protein', ['dej', 'col'], 400, 80, 10, 5, { common: true, short: 'whey', cost: 2, min: 30, max: 60, supplement: true, animal: 'dairy', allergens: ['lait'], unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['whey', 'poudre', 'proteine'], brands: 'Optimum Nutrition Gold Standard, Dymatize ISO100, Isopure, Kirkland' }),
   F('vegprot', 'Poudre de protéines végétales (pois/riz)', 'protein', ['dej', 'col'], 380, 75, 8, 6, { short: 'protéines végétales en poudre', cost: 3, min: 30, max: 60, supplement: true, unit: { n: 'mesure', p: 'mesures', g: 30 }, kw: ['poudre', 'proteine', 'vegetale'], brands: 'Vega Sport, Sunwarrior, Garden of Life' }),
-  F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { short: 'tofu', cost: 1, min: 100, max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
+  F('tofu', 'Tofu ferme', 'protein', ['din', 'sou'], 140, 16, 3, 8, { vegOnly: true, short: 'tofu', cost: 1, min: 100, max: 250, allergens: ['soya'], kw: ['tofu', 'soya'], brands: 'Unisoya, Sunrise Soya Foods' }),
   F('haricots_rouges', 'Haricots rouges cuits', 'protein', ['din', 'sou'], 121, 8.1, 20.8, 0.9, { short: 'haricots rouges', cost: 1, legume: true, min: 120, max: 250, kw: ['haricot rouge', 'legumineuse', 'fèves'], brands: 'en conserve, égouttés et rincés (ex. Unico, Kirkland, Irresistibles)' }),
   F('haricots_noirs', 'Haricots noirs cuits', 'protein', ['din', 'sou'], 132, 8.9, 23.7, 0.5, { short: 'haricots noirs', cost: 1, legume: true, min: 120, max: 250, kw: ['haricot noir', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
   F('pois_chiches', 'Pois chiches cuits', 'protein', ['din', 'sou'], 138, 7, 22.9, 2.5, { short: 'pois chiches', cost: 1, legume: true, min: 120, max: 250, kw: ['pois chiche', 'legumineuse'], brands: 'en conserve, égouttés et rincés (ex. Unico, Compliments)' }),
@@ -180,6 +181,7 @@ export function allowed(food, prefs = {}) {
   if (diet === 'vegetalien' && food.animal) return false;
   if (diet === 'pescetarien' && food.animal === 'meat') return false;
   if (diet === 'sans_porc' && food.pork) return false;
+  if (food.vegOnly && diet !== 'vegetarien' && diet !== 'vegetalien') return false;
   // « oeufs, saumon » -> on retire le « s » final pour reconnaître le pluriel
   const dislikes = String(prefs.dislikes || '').split(/[,;\n]/).map((s) => norm(s.trim()).replace(/s$/, '')).filter((s) => s.length >= 3);
   // Autres allergies (recherche du formulaire) : même règle que les aliments non aimés, par nom et mots-clés.
