@@ -763,16 +763,18 @@ function vFood() {
   <p class="muted">Quantités en aliments cuits, sauf indication. Les marques sont des exemples courants et les valeurs sont des moyennes : vérifie l’étiquette de ta marque.</p>
   ${cd.meals.map((m, si) => `
     <section class="card">
-      <div class="row between"><h2>${SLOT_NAMES[m.slot]}</h2><span class="muted">${m1(m.totals.k)} kcal · ${m1(m.totals.p)} g prot.</span></div>
-      ${eaten ? `<button type="button" class="small eat ${eaten.includes(m.slot) ? '' : 'ghost'}" data-act="toggleEaten" data-arg="${m.slot}" aria-pressed="${eaten.includes(m.slot)}">${eaten.includes(m.slot) ? '✓ Mangé' : 'Marquer comme mangé'}</button>` : ''}
-      ${mealName(m, m.items) ? `<p class="meal-name">${esc(mealName(m, m.items))}</p>` : ''}
+      <div class="meal-head">
+        <div><h2>${SLOT_NAMES[m.slot]}</h2>${mealName(m, m.items) ? `<p class="meal-name">${esc(mealName(m, m.items))}</p>` : ''}
+          <p class="meal-sum">${m1(m.totals.k)} kcal · <span class="mp">${m1(m.totals.p)} g prot.</span></p></div>
+        ${eaten ? `<button type="button" class="small eat ${eaten.includes(m.slot) ? '' : 'ghost'}" data-act="toggleEaten" data-arg="${m.slot}" aria-pressed="${eaten.includes(m.slot)}">${eaten.includes(m.slot) ? '✓ Mangé' : 'Mangé ?'}</button>` : ''}
+      </div>
       ${mealRecipe(m) ? `<details class="recipe"><summary>Comment le préparer</summary><p class="muted">${esc(mealRecipe(m))}</p></details>` : ''}
       ${m.items.map((it, ii) => it.g <= 0 ? '' : `
         <div class="food">
           <div style="flex:1">
             <b>${qtyText(it)}</b> ${esc(it.food.name)}${it.extra ? '<br><span class="muted small">+ ajouté pour atteindre ta cible</span>' : ''}
-            <div class="muted">P ${m1(it.macros.p)} · G ${m1(it.macros.c)} · L ${m1(it.macros.f)} · ${m1(it.macros.k)} kcal</div>
-            <div class="muted">Marques : ${esc(it.food.brands)}</div>
+            <div class="macro-line"><span class="mp">P ${m1(it.macros.p)}</span><span class="mg">G ${m1(it.macros.c)}</span><span class="ml">L ${m1(it.macros.f)}</span><span>${m1(it.macros.k)} kcal</span></div>
+            <div class="brands">Marques : ${esc(it.food.brands)}</div>
           </div>
           ${it.extra ? '' : `<button type="button" class="ghost small" data-act="swapFood" data-slot="${si}" data-item="${ii}" aria-label="Remplacer ${esc(it.food.name)}">↔</button>`}
         </div>`).join('')}
@@ -781,9 +783,9 @@ function vFood() {
   <section class="card">
     <h2>Total du plan</h2>
     <div class="row between"><span>Calories</span><span>${m1(cd.totals.k)} / ${dayT.calories}</span></div>${bar(cd.totals.k, dayT.calories)}
-    <div class="row between"><span>Protéines</span><span>${m1(cd.totals.p)} / ${dayT.protein} g</span></div>${bar(cd.totals.p, dayT.protein)}
-    <div class="row between"><span>Glucides</span><span>${m1(cd.totals.c)} / ${dayT.carbs} g</span></div>${bar(cd.totals.c, dayT.carbs)}
-    <div class="row between"><span>Lipides</span><span>${m1(cd.totals.f)} / ${dayT.fat} g</span></div>${bar(cd.totals.f, dayT.fat)}
+    <div class="row between"><span>Protéines</span><span>${m1(cd.totals.p)} / ${dayT.protein} g</span></div>${bar(cd.totals.p, dayT.protein, 'p')}
+    <div class="row between"><span>Glucides</span><span>${m1(cd.totals.c)} / ${dayT.carbs} g</span></div>${bar(cd.totals.c, dayT.carbs, 'g')}
+    <div class="row between"><span>Lipides</span><span>${m1(cd.totals.f)} / ${dayT.fat} g</span></div>${bar(cd.totals.f, dayT.fat, 'l')}
     <p class="muted">Les quantités visent tes cibles à quelques grammes près et se recalculent quand tu changes un aliment ou tes cibles.</p>
     <div class="grid2">
       <button class="ghost" data-act="grocery">Liste d’épicerie</button>

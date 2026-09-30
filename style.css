@@ -241,7 +241,20 @@ button.link { background: none; border: 0; min-height: 0; padding: 6px 4px; colo
 button.link:hover { background: none; color: var(--text); text-decoration: underline; }
 .onb-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 8px; margin-top: 6px; color: var(--muted); font-size: 14px; }
 .onboard > .block { margin-top: 4px; }
-.meal-name { margin: -2px 0 6px; font-weight: 600; color: var(--accent-strong); }
+.meal-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.meal-head h2 { margin: 0; font: 700 24px/1.1 var(--display); }
+.meal-name { margin: 2px 0 0; font-weight: 600; font-size: 15.5px; line-height: 1.3; }
+.meal-sum { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.meal-head .eat { flex: none; }
+.macro-line { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.macro-line span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; background: var(--line); }
+.macro-line .mp::before { background: var(--plate-red); }
+.macro-line .mg::before { background: var(--plate-yellow); }
+.macro-line .ml::before { background: var(--plate-slate); }
+.meal-sum .mp { color: var(--plate-red); font-weight: 600; }
+.brands { color: var(--muted); font-size: 13px; opacity: .85; }
+.food b { font-weight: 700; }
+.bar.l i { background: var(--plate-slate); }
 .recipe { margin: 0 0 6px; }
 .recipe summary { cursor: pointer; color: var(--muted); font-size: 14px; }
 .recipe p { margin: 4px 0 0; }
@@ -276,3 +289,5 @@ button.link:hover { background: none; color: var(--text); text-decoration: under
 .nutri .row span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
 .nutri .row b { font: 700 20px/1 var(--display); color: var(--text); }
 form[data-form=workout] > h2 { font: 700 30px/1.1 var(--display); }
+button.eat:not(.ghost) { background: var(--good); color: #fff; }
+.grid2 > button, .grid2 > .btn { padding-left: 8px; padding-right: 8px; font-size: 15px; }
