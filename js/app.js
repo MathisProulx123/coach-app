@@ -119,7 +119,7 @@ function toast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3200);
 }
-const bar = (v, t) => `<div class="bar"><i style="width:${Math.min(100, t ? (v / t) * 100 : 0)}%"></i></div>`;
+const bar = (v, t, kind = '') => `<div class="bar ${kind}"><i style="width:${Math.min(100, t ? (v / t) * 100 : 0)}%"></i></div>`;
 const GOALS = { lose: 'Perdre du gras', maintain: 'Maintenir', gain: 'Prendre du muscle' };
 const LEVEL5 = ['1 · Très bas', '2 · Bas', '3 · Correct', '4 · Bon', '5 · Excellent'];
 // Exercice qu'on tient (planche…) : la 1re photo de la base est la position de départ (à genoux, couché),
@@ -273,22 +273,23 @@ function vHome() {
   const last = S.checkins[S.checkins.length - 1];
   const msgs = (last?.coach?.messages) || plan.reasons || [];
   return `
-  <section class="card">
+  <section class="hello">
     <h2>Salut ${esc(p.name)} 👋</h2>
-    <p class="muted">Semaine ${S.checkins.length + (done ? 0 : 1)} · objectif : ${GOALS[p.goal]}</p>
+    <p class="muted">Semaine ${S.checkins.length + (done ? 0 : 1)}, objectif : ${GOALS[p.goal].toLowerCase()}</p>
     ${done
-      ? '<p>✅ Check-in de la semaine fait.</p>'
-      : '<a class="btn block" href="#/checkin">Faire mon check-in de la semaine</a>'}
+      ? '<p class="done">✅ Check-in de la semaine fait</p>'
+      : '<a class="btn ghost block" href="#/checkin">Faire mon check-in de la semaine</a>'}
   </section>
-  <section class="card">
-    <div class="row between"><h2>Prochaine séance</h2>${plan.deload ? '<span class="pill">Semaine légère</span>' : ''}</div>
-    <p><b>${esc(day.label)}</b><br><span class="muted">${day.exercises.map((e) => esc(defOf(e).name)).join(' · ')}</span></p>
-    <button class="block" data-act="startDay" data-arg="${idx}">Commencer</button>
+  <section class="card hero">
+    <div class="row between"><p class="kicker">Prochaine séance</p>${plan.deload ? '<span class="pill">Semaine légère</span>' : ''}</div>
+    <p class="day">${esc(day.label)}</p>
+    <ul>${day.exercises.map((e) => `<li>${esc(defOf(e).name)}</li>`).join('')}</ul>
+    <button class="block" data-act="startDay" data-arg="${idx}">Commencer la séance</button>
   </section>
-  <section class="card">
+  <section class="card nutri">
     <h2>Nutrition aujourd’hui</h2>
-    <div class="row between"><span>Calories</span><span>${log.calories || 0} / ${plan.calories} kcal</span></div>${bar(log.calories || 0, plan.calories)}
-    <div class="row between"><span>Protéines</span><span>${log.protein || 0} / ${plan.protein} g</span></div>${bar(log.protein || 0, plan.protein)}
+    <div class="row between"><span>Calories</span><span><b>${log.calories || 0}</b> / ${plan.calories} kcal</span></div>${bar(log.calories || 0, plan.calories)}
+    <div class="row between"><span>Protéines</span><span><b>${log.protein || 0}</b> / ${plan.protein} g</span></div>${bar(log.protein || 0, plan.protein, 'p')}
     ${prefs().done
       ? '<a class="btn ghost block" href="#/food">Voir mes repas</a>'
       : '<a class="btn block" href="#/food">Créer mon plan de repas (2 min)</a>'}
@@ -732,9 +733,9 @@ function vFood() {
   </section>
   <section class="card">
     <h2>Tes cibles du jour</h2>
-    <div class="grid4">
-      <div class="stat"><b>${dayT.calories}</b><span>kcal</span></div><div class="stat"><b>${dayT.protein}</b><span>protéines g</span></div>
-      <div class="stat"><b>${dayT.carbs}</b><span>glucides g</span></div><div class="stat"><b>${dayT.fat}</b><span>lipides g</span></div>
+    <div class="grid4 macros">
+      <div class="stat k"><b>${dayT.calories}</b><span>kcal</span></div><div class="stat p"><b>${dayT.protein}</b><span>protéines g</span></div>
+      <div class="stat g"><b>${dayT.carbs}</b><span>glucides g</span></div><div class="stat l"><b>${dayT.fat}</b><span>lipides g</span></div>
     </div>
     <div class="grid3" style="margin-top:10px">
       <div class="stat"><b>≥ ${ex.fibre} g</b><span>fibres</span></div><div class="stat"><b>${pr.water ? '' : '≈ '}${String(pr.water ?? ex.eau).replace('.', ',')} L</b><span>eau</span></div>
@@ -967,8 +968,8 @@ function vCheckin() {
       ${c.messages.map((m) => `<div class="msg"><span>${m.icon}</span><span>${esc(m.text)}</span></div>`).join('')}
     </section>
     <section class="card"><h2>Ton plan cette semaine</h2>
-      <div class="grid4"><div class="stat"><b>${pl.calories}</b><span>kcal</span></div><div class="stat"><b>${pl.protein}</b><span>prot. g</span></div>
-      <div class="stat"><b>${pl.carbs}</b><span>gluc. g</span></div><div class="stat"><b>${pl.fat}</b><span>lip. g</span></div></div>
+      <div class="grid4 macros"><div class="stat k"><b>${pl.calories}</b><span>kcal</span></div><div class="stat p"><b>${pl.protein}</b><span>prot. g</span></div>
+      <div class="stat g"><b>${pl.carbs}</b><span>gluc. g</span></div><div class="stat l"><b>${pl.fat}</b><span>lip. g</span></div></div>
       ${pl.deload ? '<p><span class="pill">Semaine légère</span></p>' : ''}
     </section>
     ${canAI() ? `<section class="card"><h2>Avis du coach IA</h2>${cur.coach?.ai ? `<p>${esc(cur.coach.ai)}</p>` : '<p class="muted">Un commentaire personnalisé sur ta semaine.</p><button class="block" data-act="askAI">Demander un avis</button>'}</section>`
