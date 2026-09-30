@@ -227,3 +227,5 @@ button.link:hover { background: none; color: var(--text); text-decoration: under
 .recipe { margin: 0 0 6px; }
 .recipe summary { cursor: pointer; color: var(--muted); font-size: 14px; }
 .recipe p { margin: 4px 0 0; }
+.exhist { margin: 4px 0; }
+.warmup { margin: 4px 0 6px; }

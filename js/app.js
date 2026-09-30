@@ -304,6 +304,16 @@ function firstTimeNote(day) {
   return `<p class="muted">💡 Première fois : choisis une charge qui te laisse 1 ou 2 répétitions en réserve${bw ? ' (au poids du corps : un maximum propre dans la fourchette)' : ''}.</p>`;
 }
 
+// Séries d'échauffement qui montent vers la charge du jour (arrondies à 2,5 kg ou 5 lb), pour le premier exercice
+// avec charge de la séance. Sans charge connue (première fois) : conseil général.
+function warmupHtml(targetKg, id) {
+  if (!targetKg) return '<p class="muted warmup">🔥 Échauffement : 2 ou 3 séries légères qui montent vers ta charge de travail, avant tes séries.</p>';
+  const lb = loadUnitFor(id) !== 'kg';
+  const at = (pct) => (lb ? `${Math.max(5, Math.round((kgToLb(targetKg) * pct) / 5) * 5)} lb` : `${Math.max(2.5, Math.round((targetKg * pct) / 2.5) * 2.5)} kg`);
+  const steps = targetKg >= 40 ? [[0.5, 8], [0.7, 4], [0.85, 2]] : [[0.5, 10], [0.75, 5]];
+  return `<p class="muted warmup">🔥 Échauffement : ${steps.map(([pct, r]) => `${at(pct).replace('.', ',')} × ${r}`).join(', ')}, puis tes séries.</p>`;
+}
+
 function vTrain() {
   const prog = S.plan.program;
   const idx = S.dayIdx ?? nextDayIdx();
@@ -321,6 +331,7 @@ function vTrain() {
       const def = defOf(ex);
       const last = lastSets(ex.id);
       const t = nextTarget(def, ex, last, { deload: S.plan.deload, hold: S.plan.hold });
+      const warm = i === day.exercises.findIndex((e) => !defOf(e).bw && !defOf(e).time);
       const unit = def.time ? 's' : 'répétitions';
       return `<div class="ex">
         <div class="row tap" data-act="exInfo" data-arg="${ex.id}" role="button" tabindex="0" aria-label="Voir l’exercice ${esc(def.name)}">
@@ -328,6 +339,7 @@ function vTrain() {
           <div style="flex:1"><h3>${esc(def.name)} <span class="muted">ⓘ</span></h3>
           <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${loadTxt(t.w, ex.id)}` : ''}</div></div>
         </div>
+        ${warm ? warmupHtml(t.w, ex.id) : ''}
         ${t.first && !last ? '' : `<div class="muted">${t.first ? '' : esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${loadUnitFor(ex.id) === 'kg' ? round1(s.w || 0) : round1(kgToLb(s.w || 0))}${loadUnitFor(ex.id) === 'kg' ? '' : ' lb'}×${s.r}`).join(', ')}.` : ''}</div>`}
         <div class="sets">${Array.from({ length: t.sets }, (_, s) => {
           const a = loadInputAttrs(t.w, ex.id);
@@ -368,6 +380,50 @@ function loadUnitPickerHtml(id) {
     <p class="muted">Total = barre + 2 × (plates que tu tapes). Ex. « 1 plate 25 » = 1×${pr.plate_lb} + 25 par côté. Ce réglage de plate/barre est le même pour tous tes exercices en mode plates.</p>`
       : '<p class="muted">Ne change que cet exercice ; les autres gardent leur propre unité.</p>'}`;
 }
+// ----- Progrès d'un exercice : record, courbe et dernières séances (fiche de l'exercice) -----
+const shortLoad = (kg, id) => (loadUnitFor(id) === 'kg' ? `${round1(kg)} kg` : `${round1(kgToLb(kg))} lb`).replace('.', ',');
+function exHistory(id) {
+  return S.workouts.map((w) => ({ date: w.date, sets: (w.exercises.find((e) => e.id === id)?.sets || []).filter((x) => +x.r > 0) }))
+    .filter((x) => x.sets.length);
+}
+function exProgressHtml(id) {
+  const def = defById(id);
+  const h = exHistory(id);
+  if (!h.length) return '<h3>Tes progrès</h3><p class="muted">Pas encore de séance avec cet exercice : ton record apparaîtra ici.</p>';
+  const loaded = !def.time && h.some((x) => x.sets.some((st) => +st.w > 0));
+  // Série la plus forte : charge et répétitions ensemble (1RM estimé, formule d'Epley), ou le plus de répétitions / secondes.
+  const score = (st) => (loaded ? (+st.w || 0) * (1 + st.r / 30) : +st.r);
+  const setTxt = (st) => (def.time ? `${st.r} s` : +st.w > 0 ? `${shortLoad(+st.w, id)} × ${st.r}` : `${st.r} rép.`);
+  const top = (sets) => sets.reduce((b, st) => (score(st) > score(b) ? st : b));
+  // Une séance en une ligne courte : « 65 kg × 8, 7, 7 » (séries de même charge regroupées).
+  const sessionTxt = (sets) => {
+    if (def.time) return sets.map((st) => `${st.r} s`).join(', ');
+    const groups = [];
+    for (const st of sets) {
+      const g = groups[groups.length - 1];
+      if (g && g.w === (+st.w || 0)) g.r.push(st.r); else groups.push({ w: +st.w || 0, r: [st.r] });
+    }
+    return groups.map((g) => (g.w > 0 ? `${shortLoad(g.w, id)} × ${g.r.join(', ')}` : `${g.r.join(', ')} rép.`)).join(' · ');
+  };
+  let best = null;
+  for (const x of h) { const t = top(x.sets); if (!best || score(t) > score(best.st)) best = { st: t, date: x.date }; }
+  const pts = h.slice(-12).map((x) => score(top(x.sets)));
+  let spark = '';
+  if (pts.length >= 2) {
+    const W = 300, H = 60, lo = Math.min(...pts), hi = Math.max(...pts), span = hi - lo || 1;
+    const xy = pts.map((v, i) => `${Math.round((i / (pts.length - 1)) * (W - 8) + 4)},${Math.round(H - 6 - ((v - lo) / span) * (H - 12))}`);
+    spark = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Évolution de ta meilleure série">
+      <polyline points="${xy.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${xy.map((p) => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--accent)"/>`).join('')}</svg>
+      <p class="muted">Ta meilleure série à chaque séance (${pts.length} dernières).</p>`;
+  }
+  return `
+    <h3>Tes progrès</h3>
+    <p><b>🏆 Record : ${setTxt(best.st)}</b> <span class="muted">(${fmtDate(best.date)})</span></p>
+    ${spark}
+    ${[...h].reverse().slice(0, 5).map((x) => `<p class="exhist"><span class="muted">${fmtDate(x.date)}</span> ${sessionTxt(x.sets)}</p>`).join('')}`;
+}
+
 function exInfoHtml(id) {
   const ex = defById(id);
   if (ex.custom) {
@@ -377,6 +433,7 @@ function exInfoHtml(id) {
     ${ex.cue ? `<p>${esc(ex.cue)}</p>` : '<p class="muted">Pas de consigne enregistrée.</p>'}
     ${/^https?:\/\//i.test(ex.url) ? `<a class="btn ghost block" href="${esc(ex.url)}" target="_blank" rel="noopener noreferrer">Voir la vidéo</a>` : ''}
     <a class="btn ghost block" style="margin-top:8px" href="#/edit">Modifier mon programme</a>
+    ${exProgressHtml(id)}
     ${loadUnitPickerHtml(id)}`;
   }
   const fig = (n, label) => `<figure><img src="${imgUrl(id, n)}" data-fb="${imgFallback(id, n)}" alt="${label} : ${esc(ex.name)}"><figcaption>${label}</figcaption></figure>`;
@@ -386,6 +443,7 @@ function exInfoHtml(id) {
     ${exMeta(ex) ? `<p class="muted">${esc(exMeta(ex))}</p>` : ''}
     <p>${esc(ex.cue)}</p>
     <button class="ghost block" data-act="exAlts" data-arg="${id}">Je ne peux pas / n’aime pas cet exercice : voir les variantes</button>
+    ${exProgressHtml(id)}
     <p class="muted">Photos : Free Exercise DB (domaine public).</p>
     ${loadUnitPickerHtml(id)}`;
 }
