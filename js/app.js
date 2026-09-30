@@ -1620,10 +1620,10 @@ function renderAuth() {
   const card = {
     sent: `<div class="card"><h2>Vérifie tes courriels 📬</h2>
       <p>On t’a envoyé un lien à <b>${email}</b>. Clique dessus pour activer ton compte : tu reviendras ici, connecté.</p>
-      <p class="muted">Rien reçu après quelques minutes ? Regarde dans les courriels indésirables.</p>${back}</div>`,
+      <p class="spam-note">📂 Le courriel peut arriver dans tes <b>courriels indésirables</b> : regarde là aussi.</p>${back}</div>`,
     resetSent: `<div class="card"><h2>Lien envoyé 📬</h2>
       <p>Si un compte existe pour <b>${email}</b>, tu vas recevoir un lien pour choisir un nouveau mot de passe.</p>
-      <p class="muted">Rien reçu après quelques minutes ? Regarde dans les courriels indésirables.</p>${back}</div>`,
+      <p class="spam-note">📂 Le courriel peut arriver dans tes <b>courriels indésirables</b> : regarde là aussi.</p>${back}</div>`,
     forgot: `<form data-form="forgot" class="card"><h2>Mot de passe oublié</h2>
       <p class="muted">Entre ton courriel : on t’envoie un lien pour en choisir un nouveau.</p>
       <label>Courriel</label><input name="email" type="email" required autocomplete="email" value="${email}">
