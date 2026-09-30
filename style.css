@@ -164,7 +164,7 @@ svg.chart { width: 100%; height: auto; }
 .auth { max-width: 420px; margin: 0 auto; padding: calc(7vh + env(safe-area-inset-top)) 16px 24px; }
 .brand { text-align: center; margin-bottom: 22px; }
 .brand .logo {
-  width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px; display: grid; place-items: center;
+  width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
   background: var(--accent); color: var(--accent-text); box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .brand .logo svg { width: 34px; height: 34px; stroke-width: 2.2; }
@@ -219,7 +219,7 @@ input.mini { width: 58px; padding: 6px; text-align: center; }
 .onboard .chat { max-height: 52vh; overflow-y: auto; padding-right: 2px; }
 .onboard { padding-top: calc(3vh + env(safe-area-inset-top)); }
 .onboard .brand { margin-bottom: 14px; }
-.onboard .brand .logo { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 8px; }
+.onboard .brand .logo { width: 48px; height: 48px; margin-bottom: 8px; }
 .onboard .brand .logo svg { width: 24px; height: 24px; }
 .onboard .brand h1 { font-size: 28px; }
 .actions-card { align-self: stretch; margin: -2px 0 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); font-size: 14.5px; }
@@ -291,3 +291,18 @@ button.link:hover { background: none; color: var(--text); text-decoration: under
 form[data-form=workout] > h2 { font: 700 30px/1.1 var(--display); }
 button.eat:not(.ghost) { background: var(--good); color: #fff; }
 .grid2 > button, .grid2 > .btn { padding-left: 8px; padding-right: 8px; font-size: 15px; }
+
+/* Coach : suggestions en pastilles, zone de message arrondie avec bouton rond */
+.chips button { border-radius: 99px; background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 500; padding: 8px 14px; }
+.chips button:hover { background: var(--accent-soft); border-color: transparent; }
+.chatform { background: var(--field); border: 1px solid var(--line); border-radius: 24px; padding: 6px 6px 6px 4px; align-items: flex-end; }
+.chatform:focus-within { border-color: var(--accent); }
+.chatform textarea { border: 0; background: transparent; box-shadow: none; resize: none; padding: 9px 12px; }
+.chatform textarea:focus { box-shadow: none; }
+.chatform .send { width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; flex: none; display: grid; place-items: center; }
+.chatform .send svg { width: 20px; height: 20px; stroke-width: 2.4; }
+.bubble { line-height: 1.45; }
+.bubble.ai { background: var(--field); }
+/* Logo rond comme un disque : anneau intérieur */
+.brand .logo { position: relative; }
+.brand .logo::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent-text) 30%, transparent); }

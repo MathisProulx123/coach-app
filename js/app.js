@@ -1194,7 +1194,7 @@ function vCoach() {
     </div>
     <form data-form="chat" class="chatform">
       <textarea name="q" rows="2" placeholder="Écris ton message…" required></textarea>
-      <button ${S.chatBusy ? 'disabled' : ''}>Envoyer</button>
+      <button class="send" ${S.chatBusy ? 'disabled' : ''} aria-label="Envoyer"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
     ${hist.length ? '<button type="button" class="ghost small" data-act="clearChat">Effacer la conversation</button>' : ''}
     ${canAI() ? '<p class="muted" style="margin-top:10px">Tes photos de progrès, quand tu les analyses, sont envoyées à Google (Gemini) pour cette réponse seulement.</p>' : ''}
@@ -1619,7 +1619,7 @@ function onbChatHtml(o) {
   const total = Object.keys(ESSENTIALS).length, known = total - missing(o.draft).length;
   return `
   <section class="card">
-    <div class="row between"><h2>Faisons connaissance</h2><span class="muted">${known}/${total} infos clés</span></div>
+    <div class="row between"><h2>Faisons connaissance</h2><span class="muted">${known} sur ${total} infos</span></div>
     ${bar(known, total)}
     <div class="chat">
       ${o.hist.map((m) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>`).join('')}
@@ -1627,7 +1627,7 @@ function onbChatHtml(o) {
     </div>
     <form data-form="onbChat" class="chatform">
       <textarea name="q" rows="2" placeholder="Ta réponse…" required ${o.busy ? 'disabled' : ''}>${esc(o.retry || '')}</textarea>
-      <button ${o.busy ? 'disabled' : ''}>Envoyer</button>
+      <button class="send" ${o.busy ? 'disabled' : ''} aria-label="Envoyer"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
     ${db.DEMO ? '<p class="muted" style="margin-top:10px">Mode démo : coach scripté (sans IA), pour tester le parcours.</p>' : ''}
   </section>
