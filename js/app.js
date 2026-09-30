@@ -976,6 +976,14 @@ function vCheckin() {
       <div class="stat g"><b>${pl.carbs}</b><span>gluc. g</span></div><div class="stat l"><b>${pl.fat}</b><span>lip. g</span></div></div>
       ${pl.deload ? '<p><span class="pill">Semaine légère</span></p>' : ''}
     </section>
+    <section class="card"><h2>Photos de la semaine</h2>
+      <p class="muted">Touche une case pour ajouter ou remplacer une photo.</p>
+      <div class="photopick">
+        ${[['front', 'De face'], ['side', 'De profil'], ['back', 'De dos']].map(([k, t]) => `
+        <label class="photoslot ${cur.photos?.[k] ? 'on' : ''}"><input type="file" accept="image/*" data-photonow="${k}">
+          <span class="photoprev">${cur.photos?.[k] ? `<img data-path="${esc(cur.photos[k])}" alt="">` : '📷'}</span><span>${t}</span></label>`).join('')}
+      </div>
+    </section>
     ${canAI() ? `<section class="card"><h2>Avis du coach IA</h2>${cur.coach?.ai ? `<p>${esc(cur.coach.ai)}</p>` : '<p class="muted">Un commentaire personnalisé sur ta semaine.</p><button class="block" data-act="askAI">Demander un avis</button>'}</section>`
       : ''}`;
   }
@@ -1993,6 +2001,23 @@ forms.daily = async (form) => {
   } catch (e) { toast(e.message); }
 };
 
+// Ajoute ou remplace une photo du check-in de la semaine, sans refaire le check-in.
+async function replacePhoto(input) {
+  const f = input.files[0], slot = input.dataset.photonow, wk = curWeek(S.checkins);
+  const cur = S.checkins.find((c) => c.week_start === wk), prev = input.parentElement.querySelector('.photoprev');
+  if (!f || !cur) return;
+  const before = prev.innerHTML;
+  prev.textContent = '…';
+  try {
+    const path = await db.uploadPhoto(S.me.id, wk, slot, await resizeImage(f));
+    cur.photos = { ...(cur.photos || {}), [slot]: path };
+    await db.saveCheckin(cur);
+    prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`;
+    input.parentElement.classList.add('on');
+    toast('Photo enregistrée');
+  } catch (e) { prev.innerHTML = before; toast(e.message); }
+}
+
 forms.checkin = async (form) => {
   const fd = new FormData(form);
   const wk = curWeek(S.checkins);
@@ -2038,6 +2063,8 @@ function bindEvents(el) {
   });
   el.addEventListener('change', (e) => {
     if (e.target.dataset.edit && S.draft) return editField(e.target);
+    // Check-in déjà envoyé : la photo choisie est enregistrée tout de suite (ajout ou remplacement)
+    if (e.target.dataset.photonow) return replacePhoto(e.target);
     // Photo de check-in choisie : aperçu dans la case
     if (e.target.dataset.photo !== undefined) {
       const f = e.target.files[0], prev = e.target.parentElement.querySelector('.photoprev');
