@@ -653,7 +653,7 @@ function vFood() {
       <button type="button" class="${dayType === 'train' ? 'on' : ''}" data-act="setDayType" data-arg="train">🏋️ Jour d’entraînement</button>
       <button type="button" class="${dayType === 'rest' ? 'on' : ''}" data-act="setDayType" data-arg="rest">🛋️ Jour de repos</button>
     </div>
-    <p class="muted">Les glucides (donc les calories) sont plus élevés les jours d’entraînement et plus bas les jours de repos. Protéines et lipides ne changent pas.</p>
+    <p class="muted">Plus de glucides les jours d’entraînement, moins les jours de repos.</p>
   </section>
   <section class="card">
     <h2>Tes cibles du jour</h2>
@@ -665,7 +665,7 @@ function vFood() {
       <div class="stat"><b>≥ ${ex.fibre} g</b><span>fibres</span></div><div class="stat"><b>${pr.water ? '' : '≈ '}${String(pr.water ?? ex.eau).replace('.', ',')} L</b><span>eau</span></div>
       <div class="stat"><b>≤ ${ex.satfat} g</b><span>gras saturés</span></div>
     </div>
-    <p class="muted">Moyenne hebdomadaire : ${pl.calories} kcal · ${pl.protein} g prot. · ${pl.carbs} g gluc. · ${pl.fat} g lip. Le coach ajuste cette moyenne chaque semaine selon ton check-in.</p>
+    <p class="muted">Moyenne de la semaine : ${pl.calories} kcal, ajustée à chaque check-in.</p>
     <button class="ghost block" data-act="editTargets">Modifier mes cibles</button>
   </section>
   ${pl.meal_plan && !pl.meal_plan.meals.some((m) => m.tpl) ? `<section class="card">
@@ -686,7 +686,7 @@ function vFood() {
       ${m.items.map((it, ii) => it.g <= 0 ? '' : `
         <div class="food">
           <div style="flex:1">
-            <b>${qtyText(it)}</b> ${esc(it.food.name)}${it.extra ? ' <span class="pill">complément</span>' : ''}
+            <b>${qtyText(it)}</b> ${esc(it.food.name)}${it.extra ? '<br><span class="muted small">+ ajouté pour atteindre ta cible</span>' : ''}
             <div class="muted">P ${m1(it.macros.p)} · G ${m1(it.macros.c)} · L ${m1(it.macros.f)} · ${m1(it.macros.k)} kcal</div>
             <div class="muted">Marques : ${esc(it.food.brands)}</div>
           </div>
