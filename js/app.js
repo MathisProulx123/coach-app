@@ -1328,7 +1328,7 @@ const streamHtml = (t) => esc(franciser(t.split('```')[0].trim() || '…')).repl
 // Sinon (question, conseil) : réflexion courte, donc réponse plus rapide.
 const CHANGE_WORDS = /remplac|chang|ajout|enleve|retir|monte|baisse|augment|diminu|modifi|\bmets?\b|compos|refai|remet|passe[rz]? a|unite|cible|calori|annul|\boui\b|\bok\b|d.accord|vas-y|parfait|\bgo\b|fais-le|applique/;
 
-async function ask(q, photos = []) {
+async function ask(q, photos = [], { mustAct = false } = {}) {
   const hist = chatLoad();
   hist.push({ r: 'user', t: q });
   chatSave(hist);
@@ -1360,6 +1360,14 @@ async function ask(q, photos = []) {
         if (!transient(e)) throw e;
         await new Promise((r) => setTimeout(r, 3000)); // Google est parfois surchargé : on réessaie une fois
         text = await db.askCoachStream(payload, onText);
+      }
+      // Bouton « points faibles » : s'il a nommé quoi renforcer sans joindre de changement à appliquer, on lui
+      // redemande seulement le bloc (une fois) et on le colle à la suite de son analyse.
+      if (mustAct && !splitActions(text).actions.length) {
+        try {
+          const more = await db.askCoach({ ...payload, reflexion: undefined, photos: [], messages: [...messages, { role: 'model', text }, { role: 'user', text: '(Message de l’application, pas de la personne : ta réponse ne contient pas de bloc actions, donc la personne n’a aucun bouton « Appliquer ». Si tu as nommé un groupe musculaire à renforcer, réponds UNIQUEMENT par le bloc ```actions``` qui fait ce petit ajustement (add_exercise ou set_sets_reps, avec le nom exact d’un jour de programme_detaille et un exercice de exercices_disponibles ou de bibliotheque_par_muscle), sans autre texte. Si les photos ne permettaient vraiment pas de juger, réponds seulement : AUCUN.)' }] });
+          if (splitActions(more).actions.length) text = `${text}\n${more.match(/```actions[\s\S]*?```/i)[0]}`;
+        } catch { /* on garde l'analyse seule */ }
       }
       // Toutes ses propositions sont refusées par l'app (ex. exercice déjà dans la séance) : on lui renvoie les raisons
       // une fois, pour qu'il propose autre chose plutôt que de laisser la personne devant « Impossible ».
@@ -1393,7 +1401,7 @@ async function ask(q, photos = []) {
 acts.ask = (el) => ask(el.dataset.q);
 acts.askPhotos = () => ask('Analyse l’évolution visible sur mes photos de progrès (silhouette, posture), en plus de mes derniers chiffres.', recentPhotos(2));
 // Points faibles : les photos du dernier check-in (face, profil, dos) + une demande d'ajustement du programme.
-acts.weakPoints = () => ask('Regarde mes dernières photos de progrès (face, profil, dos) et dis-moi quels groupes musculaires sont en retard par rapport aux autres. Propose ensuite un petit ajustement de mon programme d’entraînement pour les renforcer, que je pourrai appliquer.', recentPhotos(1));
+acts.weakPoints = () => ask('Regarde mes dernières photos de progrès (face, profil, dos) et dis-moi quels groupes musculaires sont en retard par rapport aux autres. Propose ensuite un petit ajustement de mon programme d’entraînement pour les renforcer, et termine ta réponse par le bloc actions pour que je puisse l’appliquer d’un bouton.', recentPhotos(1), { mustAct: true });
 acts.buildDiet = () => ask('Aide-moi à construire mon régime : pose-moi des questions une à la fois sur ce que j’aime manger (au déjeuner, au dîner, au souper, en collation), les quantités qui me conviennent, et mon budget épicerie. Base-toi sur des aliments courants et faciles à trouver, pas des produits de niche, et propose des combinaisons qui se mangent bien ensemble. Commence par ta première question.');
 acts.clearChat = () => { chatSave([]); render(); };
 forms.chat = async (form) => {
