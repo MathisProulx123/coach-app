@@ -1192,6 +1192,7 @@ function vCoach() {
     <div class="chips">
       ${canAI() ? '<button type="button" class="ghost small" data-act="buildDiet">🍽️ Construire mon régime avec le coach</button>' : ''}
       ${canAI() && hasPhotos ? '<button type="button" class="ghost small" data-act="askPhotos">📸 Analyser mes photos de progrès</button>' : ''}
+      ${canAI() && hasPhotos ? '<button type="button" class="ghost small" data-act="weakPoints">💪 Trouver mes points faibles</button>' : ''}
       ${CHIPS.map((c) => `<button type="button" class="ghost small" data-act="ask" data-q="${esc(c)}">${esc(c)}</button>`).join('')}
     </div>
     <form data-form="chat" class="chatform">
@@ -1383,6 +1384,8 @@ async function ask(q, photos = []) {
 }
 acts.ask = (el) => ask(el.dataset.q);
 acts.askPhotos = () => ask('Analyse l’évolution visible sur mes photos de progrès (silhouette, posture), en plus de mes derniers chiffres.', recentPhotos(2));
+// Points faibles : les photos du dernier check-in (face, profil, dos) + une demande d'ajustement du programme.
+acts.weakPoints = () => ask('Regarde mes dernières photos de progrès (face, profil, dos) et dis-moi quels groupes musculaires sont en retard par rapport aux autres. Propose ensuite un petit ajustement de mon programme d’entraînement pour les renforcer, que je pourrai appliquer.', recentPhotos(1));
 acts.buildDiet = () => ask('Aide-moi à construire mon régime : pose-moi des questions une à la fois sur ce que j’aime manger (au déjeuner, au dîner, au souper, en collation), les quantités qui me conviennent, et mon budget épicerie. Base-toi sur des aliments courants et faciles à trouver, pas des produits de niche, et propose des combinaisons qui se mangent bien ensemble. Commence par ta première question.');
 acts.clearChat = () => { chatSave([]); render(); };
 forms.chat = async (form) => {
