@@ -1,4 +1,60 @@
-<h2>Bienvenue sur Coach 👋</h2>
-<p>Salut ! Pour activer ton compte, confirme ton adresse courriel :</p>
-<p><a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 20px;background:#1f4fd1;color:#ffffff;border-radius:12px;text-decoration:none;font-weight:600">Confirmer mon courriel</a></p>
-<p>Tu n'as pas créé de compte ? Ignore simplement ce message.</p>
+<!-- Courriel « Confirm signup » : Supabase > Authentication > Emails > Templates. Sujet : Confirme ton courriel pour Coach -->
+<!-- Mise en page en tableaux et styles dans chaque balise : c'est ce que les applications de courriel affichent le mieux. -->
+<div style="margin:0;padding:0;background:#f1f2ee">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f2ee;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#16181d">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden">
+
+      <!-- En-tête bleu avec le logo en forme de disque -->
+      <tr><td align="center" style="background:#1f4fd1;padding:36px 24px 30px">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" style="width:64px;height:64px;border-radius:32px;background:#ffffff;border:4px solid #9db6ff;font-size:30px;line-height:64px">💪</td></tr></table>
+        <p style="margin:16px 0 0;font-size:30px;font-weight:bold;color:#ffffff;letter-spacing:-0.5px">Bienvenue sur Coach</p>
+        <p style="margin:6px 0 0;font-size:16px;color:#dfe7ff">Ton entraînement, tes repas et ton suivi, ajustés chaque semaine.</p>
+      </td></tr>
+
+      <!-- Message et bouton -->
+      <tr><td style="padding:32px 32px 8px">
+        <p style="margin:0 0 14px;font-size:17px;line-height:1.55">Salut !</p>
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3a3f47">Merci pour ton inscription ! Il reste une seule étape : confirme ton adresse courriel pour activer ton compte. Tu reviendras ensuite directement dans l’app, déjà connecté.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center">
+          <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 34px;background:#1f4fd1;color:#ffffff;border-radius:14px;text-decoration:none;font-size:17px;font-weight:bold">Confirmer mon courriel</a>
+        </td></tr></table>
+      </td></tr>
+
+      <!-- Ce qui l'attend -->
+      <tr><td style="padding:28px 32px 8px">
+        <p style="margin:0 0 14px;font-size:18px;font-weight:bold">Ce qui t’attend</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td width="14" valign="top" style="padding:6px 12px 14px 0"><div style="width:12px;height:12px;border-radius:6px;background:#1f4fd1"></div></td>
+            <td style="padding:0 0 14px;font-size:15px;line-height:1.55;color:#3a3f47"><b style="color:#16181d">Ton programme d’entraînement</b><br>Le coach te pose quelques questions et monte un programme adapté à ton but, ton matériel et tes journées.</td>
+          </tr>
+          <tr>
+            <td width="14" valign="top" style="padding:6px 12px 14px 0"><div style="width:12px;height:12px;border-radius:6px;background:#d2302c"></div></td>
+            <td style="padding:0 0 14px;font-size:15px;line-height:1.55;color:#3a3f47"><b style="color:#16181d">Tes repas</b><br>Des repas avec des aliments de l’épicerie, les bonnes quantités pour tes cibles et ta liste d’épicerie.</td>
+          </tr>
+          <tr>
+            <td width="14" valign="top" style="padding:6px 12px 14px 0"><div style="width:12px;height:12px;border-radius:6px;background:#d99a00"></div></td>
+            <td style="padding:0 0 14px;font-size:15px;line-height:1.55;color:#3a3f47"><b style="color:#16181d">Ton suivi chaque semaine</b><br>Un check-in rapide (poids, énergie, photos) et le coach ajuste tes calories et ton programme.</td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <!-- Lien de secours -->
+      <tr><td style="padding:12px 32px 28px">
+        <div style="background:#f5f6f3;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.5;color:#5d636d">
+          Le bouton ne fonctionne pas ? Copie ce lien dans ton navigateur :<br>
+          <a href="{{ .ConfirmationURL }}" style="color:#1f4fd1;word-break:break-all">{{ .ConfirmationURL }}</a>
+        </div>
+      </td></tr>
+
+      <!-- Pied de page -->
+      <tr><td style="padding:20px 32px 28px;border-top:1px solid #e6e8e3;font-size:13px;line-height:1.55;color:#80868f" align="center">
+        Tu n’as pas créé de compte sur Coach ? Ignore simplement ce courriel : aucun compte ne sera activé.<br>
+        <span style="color:#a3a8ae">Coach · ton coach d’entraînement et de nutrition, dans ta poche</span>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</div>

@@ -1,4 +1,56 @@
-<h2>Nouveau mot de passe</h2>
-<p>Salut ! Tu as demandé à changer ton mot de passe. Touche le bouton pour en choisir un nouveau :</p>
-<p><a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 20px;background:#1f4fd1;color:#ffffff;border-radius:12px;text-decoration:none;font-weight:600">Choisir un nouveau mot de passe</a></p>
-<p>Ce n'est pas toi ? Ignore ce message : ton mot de passe ne change pas.</p>
+<!-- Courriel « Reset password » : Supabase > Authentication > Emails > Templates. Sujet : Choisis un nouveau mot de passe pour Coach -->
+<!-- Mise en page en tableaux et styles dans chaque balise : c'est ce que les applications de courriel affichent le mieux. -->
+<div style="margin:0;padding:0;background:#f1f2ee">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f2ee;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;color:#16181d">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden">
+
+      <!-- En-tête bleu avec le logo en forme de disque -->
+      <tr><td align="center" style="background:#1f4fd1;padding:36px 24px 30px">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" style="width:64px;height:64px;border-radius:32px;background:#ffffff;border:4px solid #9db6ff;font-size:30px;line-height:64px">🔑</td></tr></table>
+        <p style="margin:16px 0 0;font-size:30px;font-weight:bold;color:#ffffff;letter-spacing:-0.5px">Nouveau mot de passe</p>
+        <p style="margin:6px 0 0;font-size:16px;color:#dfe7ff">Tu retrouves ton compte Coach en une minute.</p>
+      </td></tr>
+
+      <!-- Message et bouton -->
+      <tr><td style="padding:32px 32px 8px">
+        <p style="margin:0 0 14px;font-size:17px;line-height:1.55">Salut !</p>
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3a3f47">Tu as demandé à changer le mot de passe de ton compte Coach. Touche le bouton ci-dessous pour en choisir un nouveau. Tes séances, tes repas et tes check-ins restent intacts.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center">
+          <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:16px 34px;background:#1f4fd1;color:#ffffff;border-radius:14px;text-decoration:none;font-size:17px;font-weight:bold">Choisir un nouveau mot de passe</a>
+        </td></tr></table>
+      </td></tr>
+
+      <!-- Conseils -->
+      <tr><td style="padding:28px 32px 8px">
+        <p style="margin:0 0 14px;font-size:18px;font-weight:bold">Quelques conseils</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td width="14" valign="top" style="padding:6px 12px 14px 0"><div style="width:12px;height:12px;border-radius:6px;background:#1f4fd1"></div></td>
+            <td style="padding:0 0 14px;font-size:15px;line-height:1.55;color:#3a3f47">Le lien fonctionne <b style="color:#16181d">une seule fois</b> et expire après environ une heure. S’il a expiré, redemande-en un depuis l’écran de connexion.</td>
+          </tr>
+          <tr>
+            <td width="14" valign="top" style="padding:6px 12px 14px 0"><div style="width:12px;height:12px;border-radius:6px;background:#23945a"></div></td>
+            <td style="padding:0 0 14px;font-size:15px;line-height:1.55;color:#3a3f47">Choisis un mot de passe <b style="color:#16181d">que tu n’utilises pas ailleurs</b> : au moins 6 caractères, et plus il est long, mieux c’est.</td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <!-- Lien de secours -->
+      <tr><td style="padding:12px 32px 28px">
+        <div style="background:#f5f6f3;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.5;color:#5d636d">
+          Le bouton ne fonctionne pas ? Copie ce lien dans ton navigateur :<br>
+          <a href="{{ .ConfirmationURL }}" style="color:#1f4fd1;word-break:break-all">{{ .ConfirmationURL }}</a>
+        </div>
+      </td></tr>
+
+      <!-- Pied de page -->
+      <tr><td style="padding:20px 32px 28px;border-top:1px solid #e6e8e3;font-size:13px;line-height:1.55;color:#80868f" align="center">
+        Ce n’est pas toi ? Ignore ce courriel : ton mot de passe ne change pas et ton compte reste protégé.<br>
+        <span style="color:#a3a8ae">Coach · ton coach d’entraînement et de nutrition, dans ta poche</span>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</div>
