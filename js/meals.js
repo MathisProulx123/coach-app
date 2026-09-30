@@ -448,8 +448,9 @@ function finishDay(mealsOut, targets, prefs = {}) {
     // Tous les aliments ajustables (quantité continue) pour ce macro, du plus de marge au moins de marge :
     // si un seul ne suffit pas à absorber l'écart (plafond atteint), on complète avec le suivant.
     // Glucides en trop peu : on grossit d'abord les fruits (1 fruit de plus au déjeuner ou en collation, c'est
-    // plus naturel qu'un 2e féculent dans l'assiette), puis les féculents.
-    const roles = key === 'c' && residual > 0 ? ['fruit', 'carb'] : [ROLE_OF_MACRO[key]];
+    // plus naturel qu'un 2e féculent dans l'assiette), puis les féculents. Glucides en trop (ex. jour de repos
+    // végétarien : les légumineuses en apportent déjà) : on réduit les féculents, puis les fruits (jamais sous 1 fruit).
+    const roles = key !== 'c' ? [ROLE_OF_MACRO[key]] : residual > 0 ? ['fruit', 'carb'] : ['carb', 'fruit'];
     const candidates = [];
     for (const m of mealsOut) for (const it of m.items) {
       if (!roles.includes(it.role) || it.extra || (it.fixed && it.role !== 'fruit') || it.g <= 0 || (it.food.unit && it.food.unit.whole && it.role !== 'fruit')) continue;
