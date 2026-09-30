@@ -459,7 +459,7 @@ function exInfoHtml(id) {
     <p>${esc(ex.cue)}</p>
     <button class="ghost block" data-act="exAlts" data-arg="${id}">Je ne peux pas / n’aime pas cet exercice : voir les variantes</button>
     ${exProgressHtml(id)}
-    <p class="muted">Photos : Free Exercise DB (domaine public).</p>
+    <p class="muted">${ex.like ? 'Photos d’un mouvement semblable (pas de photo exacte pour cette machine). ' : ''}Photos : Free Exercise DB (domaine public).</p>
     ${loadUnitPickerHtml(id)}`;
 }
 acts.exInfo = (el) => openSheet(exInfoHtml(el.dataset.arg));

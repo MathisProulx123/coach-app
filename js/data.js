@@ -8,6 +8,7 @@
 // Les ~800 autres exercices de la bibliothèque (exercises_lib.js) sont ajoutés à la suite : ceux d'ici restent
 // prioritaires (programmes de départ, variantes choisies à la main).
 import { LIB, BASE_INFO } from './exercises_lib.js';
+import { EXTRA } from './exercises_extra.js';
 
 export const EXERCISES = {
   // --- Jambes ---
@@ -88,6 +89,10 @@ for (const [id, name, muscle, eq, cat, lvl, f, cue] of LIB) {
   if (EXERCISES[id]) continue;
   EXERCISES[id] = { name, img: id, muscle, eq, cat, lvl, cue, home: f.includes('h'), lower: f.includes('l'), bw: f.includes('b'), time: f.includes('t'), mech: f.includes('c') ? 'c' : f.includes('i') ? 'i' : '' };
 }
+// Poulies et machines ajoutées à la main (photo d'un mouvement semblable : like = true)
+for (const [id, name, muscle, eq, f, img, cue] of EXTRA) {
+  EXERCISES[id] = { name, img, muscle, eq, cat: 'musculation', lvl: 1, cue, like: true, lower: f.includes('l'), mech: f.includes('c') ? 'c' : 'i' };
+}
 // Groupes musculaires, dans l'ordre d'affichage (filtre de recherche)
 export const MUSCLES = ['pectoraux', 'dorsaux', 'milieu du dos', 'épaules', 'trapèzes', 'biceps', 'triceps', 'avant-bras', 'abdos',
   'lombaires', 'quadriceps', 'ischios', 'fessiers', 'mollets', 'adducteurs', 'abducteurs', 'cou'];
@@ -96,15 +101,15 @@ const TRAINING = new Set([undefined, 'musculation', 'dynamophilie']);
 
 const ALT = {
   squat: ['legpress', 'hack_squat', 'goblet', 'db_squat', 'bulg', 'stepup', 'bw_squat'],
-  legpress: ['squat', 'hack_squat', 'goblet', 'bulg', 'stepup', 'db_squat'],
-  hack_squat: ['squat', 'legpress', 'goblet', 'bulg', 'db_squat'],
+  legpress: ['squat', 'hack_squat', 'goblet', 'bulg', 'stepup', 'db_squat', 'x_seated_legpress', 'x_pendulum'],
+  hack_squat: ['squat', 'legpress', 'goblet', 'bulg', 'db_squat', 'x_pendulum', 'x_belt_squat'],
   rdl: ['db_rdl', 'good_morning', 'hip_thrust', 'seated_curl'],
-  legcurl: ['seated_curl', 'db_rdl', 'glute_bridge', 'good_morning'],
+  legcurl: ['seated_curl', 'db_rdl', 'glute_bridge', 'good_morning', 'x_cable_leg_curl'],
   seated_curl: ['legcurl', 'db_rdl', 'glute_bridge'],
   legext: ['bulg', 'goblet', 'stepup', 'db_squat'],
   calf: ['seated_calf', 'calf_db', 'calf_step'],
   seated_calf: ['calf', 'calf_db', 'calf_step'],
-  hip_thrust: ['glute_bridge', 'bb_bridge', 'db_rdl'],
+  hip_thrust: ['glute_bridge', 'bb_bridge', 'db_rdl', 'x_mach_hip_thrust'],
   bb_bridge: ['hip_thrust', 'glute_bridge'],
   lunge: ['bulg', 'stepup', 'goblet', 'db_squat'],
   good_morning: ['rdl', 'db_rdl', 'hip_thrust'],
@@ -121,41 +126,41 @@ const ALT = {
   incline_db: ['db_bench', 'machine_press', 'pushup_inc', 'bench'],
   db_bench: ['pushup', 'db_fly', 'pushup_inc', 'machine_press'],
   machine_press: ['db_bench', 'bench', 'pushup'],
-  db_fly: ['pushup', 'db_bench'],
+  db_fly: ['pushup', 'db_bench', 'x_low_high_fly', 'x_high_low_fly'],
   pushup: ['pushup_inc', 'close_pushup', 'db_bench', 'db_fly'],
   pushup_inc: ['pushup', 'db_bench', 'close_pushup'],
   close_pushup: ['pushup', 'bench_dips', 'tri_ext'],
   ohp: ['db_ohp', 'machine_shoulder', 'pushup_inc'],
   db_ohp: ['ohp', 'machine_shoulder', 'lateral', 'pushup_inc'],
   machine_shoulder: ['db_ohp', 'ohp'],
-  lateral: ['cable_lateral', 'reardelt'],
+  lateral: ['cable_lateral', 'reardelt', 'x_mach_lateral', 'x_cable_lat_standing'],
   db_lateral: ['cable_lateral', 'reardelt'],
-  cable_lateral: ['lateral', 'reardelt'],
-  tricep_push: ['ovh_rope', 'tri_ext', 'skull', 'close_pushup', 'dips', 'bench_dips'],
+  cable_lateral: ['lateral', 'reardelt', 'x_cable_lat_standing', 'x_mach_lateral'],
+  tricep_push: ['ovh_rope', 'tri_ext', 'skull', 'close_pushup', 'dips', 'bench_dips', 'x_cross_tri_ext', 'x_cable_kickback_tri'],
   ovh_rope: ['tricep_push', 'tri_ext', 'skull'],
   tri_ext: ['close_pushup', 'skull', 'ovh_rope', 'bench_dips'],
   skull: ['tricep_push', 'tri_ext', 'ovh_rope'],
   dips: ['bench_dips', 'close_pushup', 'tricep_push', 'dip_machine'],
   dip_machine: ['dips', 'bench_dips', 'tricep_push'],
   bench_dips: ['close_pushup', 'tri_ext', 'dips'],
-  row: ['dbl_row', 'db_row', 'cable_row', 'inv_row'],
+  row: ['dbl_row', 'db_row', 'cable_row', 'inv_row', 'x_mach_row'],
   dbl_row: ['row', 'db_row', 'cable_row'],
   db_row: ['dbl_row', 'inv_row', 'pullover', 'cable_row'],
-  cable_row: ['row', 'db_row', 'dbl_row', 'inv_row'],
+  cable_row: ['row', 'db_row', 'dbl_row', 'inv_row', 'x_mach_row', 'x_cable_row_wide'],
   inv_row: ['db_row', 'dbl_row', 'cable_row'],
-  lat_pd: ['vbar', 'underhand_pd', 'pullup', 'chinup', 'db_row'],
+  lat_pd: ['vbar', 'underhand_pd', 'pullup', 'chinup', 'db_row', 'x_mach_lat_pd', 'x_half_kneel_pd'],
   vbar: ['lat_pd', 'underhand_pd', 'chinup'],
   underhand_pd: ['lat_pd', 'vbar', 'chinup'],
   pullup: ['chinup', 'lat_pd', 'inv_row', 'db_row'],
   chinup: ['pullup', 'lat_pd', 'inv_row'],
-  pullover: ['db_row', 'dbl_row', 'db_fly'],
-  face_pull: ['reardelt', 'rev_machine', 'cable_lateral'],
-  rev_machine: ['reardelt', 'face_pull'],
+  pullover: ['db_row', 'dbl_row', 'db_fly', 'x_cable_pullover', 'x_mach_pullover'],
+  face_pull: ['reardelt', 'rev_machine', 'cable_lateral', 'x_cable_reverse_fly', 'x_cable_y_raise'],
+  rev_machine: ['reardelt', 'face_pull', 'x_cable_reverse_fly'],
   reardelt: ['rev_machine', 'face_pull', 'dbl_row'],
-  curl: ['hammer', 'bbcurl'],
+  curl: ['hammer', 'bbcurl', 'x_bayesian_curl', 'x_cable_curl_bar'],
   db_curl: ['hammer', 'bbcurl'],
   hammer: ['curl', 'bbcurl'],
-  bbcurl: ['curl', 'hammer'],
+  bbcurl: ['curl', 'hammer', 'x_cable_curl_bar', 'x_bayesian_curl'],
   plank: ['side_bridge', 'crunch', 'reverse_crunch'],
   side_bridge: ['plank', 'crunch', 'reverse_crunch'],
   crunch: ['reverse_crunch', 'plank', 'side_bridge'],
