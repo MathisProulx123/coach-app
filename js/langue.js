@@ -1,7 +1,8 @@
 // Filet de sécurité pour la langue du coach IA : même avec la consigne, Gemini laisse parfois passer un mot anglais
 // (ex. « choice » au lieu de « choix »). On corrige ces mots dans chaque réponse avant de l'afficher.
 // Pour en ajouter un : une ligne [mot anglais (expression régulière), remplacement français].
-// Gardés exprès (courants et compris au Québec) : cardio, shake, smoothie, check-in (nom d'un onglet de l'app).
+// Gardés exprès (courants et compris au Québec) : cardio, shake, smoothie, check-in (nom d'un onglet de l'app),
+// et les noms de séances (Full body, Push, Pull, Legs).
 const CORRECTIONS = [
   ['lean bulk', 'prise de masse sans trop de gras'],
   ['protéines?-friendly', 'riches en protéines'],
@@ -9,7 +10,6 @@ const CORRECTIONS = [
   ['friendly', 'adapté'],
   ['meal preps?', 'préparation de repas'],
   ['cheat meals?', 'repas plaisir'],
-  ['full body', 'corps complet'],
   ['warm-?ups?', 'échauffement'],
   ['cool-?downs?', 'retour au calme'],
   ['good job', 'bravo'],

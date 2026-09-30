@@ -296,6 +296,14 @@ function vHome() {
   </section>`}`;
 }
 
+// Consigne de première fois (« 1 ou 2 répétitions en réserve ») : dite UNE fois en haut de la séance, pas sous chaque exercice.
+function firstTimeNote(day) {
+  const firsts = day.exercises.filter((ex) => nextTarget(defOf(ex), ex, lastSets(ex.id), { deload: S.plan.deload, hold: S.plan.hold }).first);
+  if (!firsts.length) return '';
+  const bw = firsts.some((ex) => defOf(ex).bw);
+  return `<p class="muted">💡 Première fois : choisis une charge qui te laisse 1 ou 2 répétitions en réserve${bw ? ' (au poids du corps : un maximum propre dans la fourchette)' : ''}.</p>`;
+}
+
 function vTrain() {
   const prog = S.plan.program;
   const idx = S.dayIdx ?? nextDayIdx();
@@ -308,18 +316,19 @@ function vTrain() {
   <form data-form="workout" data-day="${idx}" class="card">
     <h2>${esc(day.label)}</h2>
     <p class="muted">Touche un exercice pour voir la position de départ et d’arrivée, ou pour le remplacer.</p>
+    ${firstTimeNote(day)}
     ${day.exercises.map((ex, i) => {
       const def = defOf(ex);
       const last = lastSets(ex.id);
       const t = nextTarget(def, ex, last, { deload: S.plan.deload, hold: S.plan.hold });
-      const unit = def.time ? 's' : 'reps';
+      const unit = def.time ? 's' : 'répétitions';
       return `<div class="ex">
         <div class="row tap" data-act="exInfo" data-arg="${ex.id}" role="button" tabindex="0" aria-label="Voir l’exercice ${esc(def.name)}">
           ${thumb(ex.id)}
           <div style="flex:1"><h3>${esc(def.name)} <span class="muted">ⓘ</span></h3>
           <div class="muted">${t.sets} × ${ex.lo}–${ex.hi} ${unit}${t.w !== null ? ` · objectif ${loadTxt(t.w, ex.id)}` : ''}</div></div>
         </div>
-        <div class="muted">${esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${loadUnitFor(ex.id) === 'kg' ? round1(s.w || 0) : round1(kgToLb(s.w || 0))}${loadUnitFor(ex.id) === 'kg' ? '' : ' lb'}×${s.r}`).join(', ')}.` : ''}</div>
+        ${t.first && !last ? '' : `<div class="muted">${t.first ? '' : esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${loadUnitFor(ex.id) === 'kg' ? round1(s.w || 0) : round1(kgToLb(s.w || 0))}${loadUnitFor(ex.id) === 'kg' ? '' : ' lb'}×${s.r}`).join(', ')}.` : ''}</div>`}
         <div class="sets">${Array.from({ length: t.sets }, (_, s) => {
           const a = loadInputAttrs(t.w, ex.id);
           const dr = draftLoad()[ex.id]?.[s];
@@ -328,7 +337,7 @@ function vTrain() {
           return `
           <span class="muted">${s + 1}</span>
           <input name="w_${i}_${s}" data-exid="${ex.id}" type="${a.type}" ${a.type === 'number' ? 'inputmode="decimal" step="0.5"' : ''} min="0" placeholder="${a.placeholder}" value="${esc(wVal)}" aria-label="Charge série ${s + 1}">
-          <input name="r_${i}_${s}" data-exid="${ex.id}" type="number" inputmode="numeric" min="0" placeholder="${unit}" value="${esc(rVal)}" aria-label="Répétitions série ${s + 1}">`; }).join('')}
+          <input name="r_${i}_${s}" data-exid="${ex.id}" type="number" inputmode="numeric" min="0" placeholder="${def.time ? 's' : 'rép.'}" value="${esc(rVal)}" aria-label="Répétitions série ${s + 1}">`; }).join('')}
         </div></div>`;
     }).join('')}
     <button class="block" style="margin-top:12px">Terminer la séance</button>
@@ -450,7 +459,7 @@ function vEdit() {
           <div style="flex:1;min-width:0">
             <b>${esc(def.name)}</b>${def.custom ? ' <span class="pill">perso</span>' : ''}
             <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
-              ${mini('sets', di, ei, e.sets)} <span class="muted">×</span> ${mini('lo', di, ei, e.lo)} <span class="muted">–</span> ${mini('hi', di, ei, e.hi)} <span class="muted">${def.time ? 's' : 'reps'}</span>
+              ${mini('sets', di, ei, e.sets)} <span class="muted">×</span> ${mini('lo', di, ei, e.lo)} <span class="muted">–</span> ${mini('hi', di, ei, e.hi)} <span class="muted">${def.time ? 's' : 'rép.'}</span>
             </div>
           </div>
           <div class="col">

@@ -159,7 +159,7 @@ export function weeklyAdjust({ profile, plan, checkins }) {
   // 3) Séances faites -> progression des charges
   const hold = !deload && cur.adherence_training < RULES.minTrainingAdherence;
   if (hold) messages.push({ icon: '🏋️', text: `Séances faites à ${cur.adherence_training} % : on ne monte pas les charges cette semaine. Vise au moins ${RULES.minTrainingAdherence} % des séances.` });
-  else if (!deload) messages.push({ icon: '📈', text: 'Charges : quand toutes les séries atteignent le haut de la fourchette de reps, la charge monte la séance suivante.' });
+  else if (!deload) messages.push({ icon: '📈', text: 'Charges : quand toutes les séries atteignent le haut de la fourchette de répétitions, la charge monte la séance suivante.' });
 
   // 4) Objectif chiffré (poids + date), si fixé
   const goal = goalStatus(profile, kg);
@@ -185,7 +185,7 @@ export function weeklyAdjust({ profile, plan, checkins }) {
 // prog = {sets, lo, hi}; last = [{w, r}, ...] ou null
 export function nextTarget(ex, prog, last, { deload = false, hold = false } = {}) {
   if (!last || !last.length) {
-    return { sets: prog.sets, w: null, note: ex.bw ? 'Fais un maximum propre dans la fourchette.' : 'Choisis une charge qui te laisse 1–2 reps en réserve.' };
+    return { sets: prog.sets, w: null, first: true, note: ex.bw ? 'Fais un maximum propre dans la fourchette.' : 'Choisis une charge qui te laisse 1 ou 2 répétitions en réserve.' };
   }
   const w = Math.max(...last.map((s) => +s.w || 0));
   const done = last.filter((s) => +s.r > 0);
@@ -199,5 +199,5 @@ export function nextTarget(ex, prog, last, { deload = false, hold = false } = {}
     const inc = ex.inc ?? (ex.lower ? RULES.loadIncrement.lower : RULES.loadIncrement.upper);
     return { sets: prog.sets, w: roundHalf(w + inc), note: `Toutes les séries au sommet : +${inc} kg.` };
   }
-  return { sets: prog.sets, w, note: anyLow ? 'Sous la fourchette : garde cette charge et vise plus de reps.' : 'Garde la charge et vise plus de reps.' };
+  return { sets: prog.sets, w, note: anyLow ? 'Sous la fourchette : garde cette charge et vise plus de répétitions.' : 'Garde la charge et vise plus de répétitions.' };
 }
