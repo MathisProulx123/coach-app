@@ -1433,8 +1433,8 @@ function profileForm(p = {}, label = 'Enregistrer', pr = prefs(), { form = 'prof
       <div><label>Date visée (optionnel)</label><input name="goal_date" type="date" value="${pr.goal_date || ''}"></div>
     </div>
     <p class="muted">Avec les deux, le coach calcule le rythme nécessaire (jamais plus vite qu’un rythme sûr) et te montre où tu en es.</p>
-    <div class="grid2">
-      <div><label>Jours d’entraînement / semaine</label><select name="days_per_week">${[2, 3, 4, 5, 6].map((n) => opt(String(n), n, String(p.days_per_week ?? 4))).join('')}</select></div>
+    <div class="grid2 wide2">
+      <div><label>Jours / semaine</label><select name="days_per_week">${[2, 3, 4, 5, 6].map((n) => opt(String(n), n, String(p.days_per_week ?? 4))).join('')}</select></div>
       <div><label>Matériel</label><select name="equipment">${opt('gym', 'Salle de sport', p.equipment)}${opt('home', 'Maison (haltères)', p.equipment)}</select></div>
     </div>
     <label>Ton but avec l’entraînement, en tes mots</label>
