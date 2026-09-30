@@ -34,7 +34,7 @@ header {
 }
 header h1 { margin: 0; font-size: 26px; font-weight: 750; letter-spacing: -.02em; }
 header a {
-  color: var(--muted); display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px;
+  color: var(--muted); display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px;
   background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line);
 }
 header a svg { width: 20px; height: 20px; }
@@ -88,7 +88,6 @@ input:focus, select:focus, textarea:focus {
 textarea { resize: vertical; }
 input[type=range] { padding: 0; accent-color: var(--accent); background: none; border: 0; box-shadow: none; }
 input[type=checkbox] { width: 18px; height: 18px; flex: none; margin: 0; accent-color: var(--accent); }
-input[type=file] { padding: 9px; font-size: 14px; }
 
 /* Onglets (segments) */
 .tabs {
@@ -114,6 +113,7 @@ input[type=file] { padding: 9px; font-size: 14px; }
 .ex h3 { margin: 0; font-size: 16px; }
 .sets { display: grid; grid-template-columns: 24px 1fr 1fr; gap: 6px 8px; align-items: center; margin-top: 8px; }
 .sets input { padding: 9px; text-align: center; }
+.sets.time { grid-template-columns: 24px 1fr; }
 
 /* Barre de navigation du bas */
 nav {
@@ -124,7 +124,7 @@ nav {
 }
 nav a {
   flex: 1; max-width: 110px; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 2px; color: var(--muted); text-decoration: none; font-size: 10.5px; font-weight: 500;
+  padding: 6px 2px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 500;
 }
 nav a .ico { display: grid; place-items: center; width: 44px; height: 28px; border-radius: 99px; transition: background-color .15s; }
 nav a svg { width: 22px; height: 22px; }
@@ -229,3 +229,11 @@ button.link:hover { background: none; color: var(--text); text-decoration: under
 .recipe p { margin: 4px 0 0; }
 .exhist { margin: 4px 0; }
 .warmup { margin: 4px 0 6px; }
+/* Photos du check-in : 3 cases à toucher, avec aperçu */
+.photopick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.photoslot { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; color: var(--text); font-size: 13.5px; }
+.photoslot input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.photoprev { width: 100%; aspect-ratio: 3/4; display: grid; place-items: center; font-size: 26px; border-radius: var(--radius-sm); border: 1.5px dashed var(--line); background: var(--field); overflow: hidden; }
+.photoprev img { width: 100%; height: 100%; object-fit: cover; }
+.photoslot.on .photoprev { border-style: solid; border-color: var(--accent); }
+.photoslot:focus-within .photoprev { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -355,15 +355,16 @@ function vTrain() {
         </div>
         ${warm ? warmupHtml(t.w, ex.id) : ''}
         ${t.first && !last ? '' : `<div class="muted">${t.first ? '' : esc(t.note)}${last ? ` Dernière fois : ${last.map((s) => `${loadUnitFor(ex.id) === 'kg' ? round1(s.w || 0) : round1(kgToLb(s.w || 0))}${loadUnitFor(ex.id) === 'kg' ? '' : ' lb'}×${s.r}`).join(', ')}.` : ''}</div>`}
-        <div class="sets">${Array.from({ length: t.sets }, (_, s) => {
+        <div class="sets${def.time ? ' time' : ''}">${Array.from({ length: t.sets }, (_, s) => {
           const a = loadInputAttrs(t.w, ex.id);
           const dr = draftLoad()[ex.id]?.[s];
           const wVal = dr?.w !== undefined ? dr.w : a.value;
           const rVal = dr?.r !== undefined ? dr.r : '';
           return `
           <span class="muted">${s + 1}</span>
-          <input name="w_${i}_${s}" data-exid="${ex.id}" type="${a.type}" ${a.type === 'number' ? 'inputmode="decimal" step="0.5"' : ''} min="0" placeholder="${a.placeholder}" value="${esc(wVal)}" aria-label="Charge série ${s + 1}">
-          <input name="r_${i}_${s}" data-exid="${ex.id}" type="number" inputmode="numeric" min="0" placeholder="${def.time ? 's' : 'rép.'}" value="${esc(rVal)}" aria-label="Répétitions série ${s + 1}">`; }).join('')}
+          ${def.time ? `<input type="hidden" name="w_${i}_${s}" value="0">` // Planche, gainage… : seulement la durée
+            : `<input name="w_${i}_${s}" data-exid="${ex.id}" type="${a.type}" ${a.type === 'number' ? 'inputmode="decimal" step="0.5"' : ''} min="0" placeholder="${a.placeholder}" value="${esc(wVal)}" aria-label="Charge série ${s + 1}">`}
+          <input name="r_${i}_${s}" data-exid="${ex.id}" type="number" inputmode="numeric" min="0" placeholder="${def.time ? 'secondes' : 'rép.'}" value="${esc(rVal)}" aria-label="${def.time ? 'Secondes' : 'Répétitions'} série ${s + 1}">`; }).join('')}
         </div></div>`;
     }).join('')}
     <button class="block" style="margin-top:12px">Terminer la séance</button>
@@ -724,8 +725,8 @@ function vFood() {
   <section class="card">
     <h2>Aujourd’hui</h2>
     <div class="tabs">
-      <button type="button" class="${dayType === 'train' ? 'on' : ''}" data-act="setDayType" data-arg="train">🏋️ Jour d’entraînement</button>
-      <button type="button" class="${dayType === 'rest' ? 'on' : ''}" data-act="setDayType" data-arg="rest">🛋️ Jour de repos</button>
+      <button type="button" class="${dayType === 'train' ? 'on' : ''}" data-act="setDayType" data-arg="train">🏋️ Entraînement</button>
+      <button type="button" class="${dayType === 'rest' ? 'on' : ''}" data-act="setDayType" data-arg="rest">🛋️ Repos</button>
     </div>
     <p class="muted">Plus de glucides les jours d’entraînement, moins les jours de repos.</p>
   </section>
@@ -991,9 +992,11 @@ function vCheckin() {
     <label>Nutrition respectée (% du plan)</label>${range('adherence_nutrition')}
     <label>Notes (blessure, faim, contexte…)</label><textarea name="notes" rows="3"></textarea>
     <h3>Photos de progrès (optionnel)</h3>
-    <label>De face</label><input type="file" name="photo_front" accept="image/*">
-    <label>De profil</label><input type="file" name="photo_side" accept="image/*">
-    <label>De dos</label><input type="file" name="photo_back" accept="image/*">
+    <div class="photopick">
+      ${[['front', 'De face'], ['side', 'De profil'], ['back', 'De dos']].map(([k, t]) => `
+      <label class="photoslot"><input type="file" name="photo_${k}" accept="image/*" data-photo>
+        <span class="photoprev">📷</span><span>${t}</span></label>`).join('')}
+    </div>
     <button class="block" style="margin-top:14px">Envoyer mon check-in</button>
   </form>`;
 }
@@ -1098,7 +1101,7 @@ function faq(q) {
   }
   return null;
 }
-const FAQ_DEFAULT = 'Je peux répondre aux questions sur l’application (exercices, repas, cibles, check-in). Pour un coaching plus personnalisé, il faut activer le coach IA (voir le README, section « Coach IA »). Note ton idée et on l’ajoutera à l’application.';
+const FAQ_DEFAULT = 'Je peux répondre aux questions sur l’application (exercices, repas, cibles, check-in). Pour le reste, je n’ai pas encore la réponse : note ton idée et on l’ajoutera à l’application.';
 
 // Chiffres déjà calculés pour que le coach parle de LA personne (« tu perds 0,6 kg par semaine ») sans refaire les calculs.
 const PACE = { lose: 'perte de 0,5 à 1 % du poids par semaine', gain: 'prise de 0,25 à 0,5 % du poids par semaine', maintain: 'poids stable (±0,5 kg)' };
@@ -1176,7 +1179,7 @@ function vCoach() {
     <h2>Ton espace coach</h2>
     <p class="muted">${canAI()
       ? 'Pose tes questions sur ton entraînement, tes repas ou tes résultats. Je connais ton profil et ton plan. Je ne remplace pas un professionnel de la santé.'
-      : 'Mode simple : je réponds aux questions sur l’application. Le coach IA complet n’est pas encore activé (voir le README, section « Coach IA »).'}</p>
+      : 'Je réponds à tes questions sur l’application : exercices, repas, cibles et check-in.'}</p>
     <div class="chat">
       ${hist.length ? hist.map((m, i) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>${m.actions ? actionCardHtml(m, i, i === lastApplied(hist)) : ''}`).join('') : '<p class="muted">Pose ta première question ou choisis une suggestion.</p>'}
       ${S.chatBusy ? `<div class="bubble ai" id="chat-stream">${S.chatPartial ? streamHtml(S.chatPartial) : '…'}</div>` : ''}
@@ -1516,7 +1519,7 @@ forms.plateSettings = async (form) => {
 };
 
 const routes = { home: vHome, train: vTrain, edit: vEdit, food: vFood, checkin: vCheckin, progress: vProgress, coach: vCoach, settings: vSettings };
-const TITLES = { home: 'Accueil', train: 'Entraînement', edit: 'Mon programme', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
+const TITLES = { home: 'Accueil', train: 'Séance', edit: 'Mon programme', food: 'Repas', checkin: 'Check-in', progress: 'Progrès', coach: 'Coach', settings: 'Réglages' };
 const TABS = [['home', 'home', 'Accueil'], ['train', 'dumbbell', 'Séance'], ['food', 'food', 'Repas'], ['checkin', 'check', 'Check-in'], ['progress', 'trend', 'Progrès'], ['coach', 'chat', 'Coach']];
 // Icônes (traits, 24×24), dessinées en SVG pour un rendu net et identique sur tous les téléphones.
 const ICONS = {
@@ -2001,6 +2004,13 @@ function bindEvents(el) {
   });
   el.addEventListener('change', (e) => {
     if (e.target.dataset.edit && S.draft) return editField(e.target);
+    // Photo de check-in choisie : aperçu dans la case
+    if (e.target.dataset.photo !== undefined) {
+      const f = e.target.files[0], prev = e.target.parentElement.querySelector('.photoprev');
+      prev.innerHTML = f ? `<img src="${URL.createObjectURL(f)}" alt="">` : '📷';
+      e.target.parentElement.classList.toggle('on', !!f);
+      return;
+    }
     // Formulaire d'exercice perso : le type change les valeurs par défaut (durée = 2 × 30-60 s)
     if (e.target.name === 'kind' && e.target.form?.dataset.form === 'customEx' && e.target.form.dataset.e === undefined) {
       const f = e.target.form, time = e.target.value === 'time';
