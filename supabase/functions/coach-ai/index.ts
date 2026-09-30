@@ -3,8 +3,9 @@
 // la fonction vérifie elle-même qui appelle (jeton de session), puis applique une limite de messages par jour et par personne.
 // Déploiement : voir README, section « Coach IA ».
 //
-// Reçoit : { messages: [{ role: 'user' | 'model', text }], context: {...}, photos?: [{ path, label }], format?: 'json' }
-// Renvoie : { text }
+// Reçoit : { messages: [{ role: 'user' | 'model', text }], context: {...}, photos?: [{ path, label }], format?: 'json',
+//           stream?: true, reflexion?: 'courte' }
+// Renvoie : { text } — ou, avec stream: true, le texte brut au fur et à mesure qu'il s'écrit.
 //
 // Les photos : le client envoie seulement leur CHEMIN dans le stockage (jamais les octets). Cette fonction va les
 // chercher elle-même dans le bucket privé « photos » avec la clé service_role (jamais exposée au navigateur).
@@ -15,6 +16,7 @@
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Expose-Headers': 'X-Coach-Model, X-Coach-Essais',
 };
 
 const SYSTEM = `Tu es le coach d'une application d'entraînement et de nutrition. Réponds toujours en français, de façon claire, chaleureuse et concrète, en 3 à 8 phrases (plus seulement si on te demande un plan détaillé). Évite le jargon.
@@ -47,8 +49,61 @@ const SUPA_URL = Deno.env.get('SUPABASE_URL');
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? 80);
 
-const json = (obj: unknown, status = 200) =>
-  new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+// X-Coach-Model : le modèle qui a répondu ; X-Coach-Essais : pourquoi les modèles d'avant ont échoué (diagnostic).
+const diag = (model: string, tries: string[]) => ({ 'X-Coach-Model': model, 'X-Coach-Essais': encodeURIComponent(tries.join(' | ').slice(0, 500)) });
+const json = (obj: unknown, status = 200, model = '', tries: string[] = []) =>
+  new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json', ...diag(model, tries) } });
+
+// Réponse au fur et à mesure : lit le flux de Gemini (événements « data: {...} ») et n'en garde que le texte
+// (pas la « réflexion » du modèle). Attend le premier morceau : renvoie null si le modèle échoue avant (on essaiera le suivant).
+async function startStream(r: Response, ctrl: AbortController, timer: number, started: number, model: string, tries: string[], debug = false) {
+  const reader = r.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = '', ended = false;
+  let events = 0, finish = '', why = ''; // diagnostic (debug: true) : pourquoi le flux s'est arrêté
+  const next = async (): Promise<string | null> => { // prochain morceau de texte, ou null à la fin
+    for (;;) {
+      const i = buf.indexOf('\n');
+      if (i >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        try {
+          const j = JSON.parse(line.slice(5));
+          events++;
+          finish = j?.candidates?.[0]?.finishReason ?? finish;
+          const t = (j?.candidates?.[0]?.content?.parts ?? [])
+            .filter((p: { thought?: boolean }) => !p.thought)
+            .map((p: { text?: string }) => p.text ?? '').join('');
+          if (t) return t;
+        } catch { /* ligne incomplète ou autre événement : on l'ignore */ }
+        continue;
+      }
+      if (ended) return null;
+      const { value, done } = await reader.read();
+      if (done) { ended = true; buf += '\n'; continue; }
+      buf += dec.decode(value, { stream: true });
+    }
+  };
+  let first: string | null = null;
+  try { first = await next(); } catch { /* délai dépassé ou coupure */ }
+  clearTimeout(timer);
+  if (!first) { ctrl.abort(); return null; }
+  // Une fois lancée, la réponse a jusqu'à ~140 s au total (Supabase coupe à 150 s).
+  const cap = setTimeout(() => ctrl.abort(), Math.max(5000, 140000 - (Date.now() - started)));
+  const enc = new TextEncoder();
+  const body = new ReadableStream({
+    async start(c) {
+      c.enqueue(enc.encode(first!));
+      try { for (let t; (t = await next()) !== null;) c.enqueue(enc.encode(t)); } catch (e) { why = String(e); /* coupure : on garde ce qui est arrivé */ }
+      clearTimeout(cap);
+      // Signal de fin (caractère ␞ puis la raison) : l'app sait ainsi si la réponse est complète (FIN:STOP) ou coupée.
+      c.enqueue(enc.encode(`␞FIN:${finish || 'COUPE'}${debug ? ` (${events} événements, erreur = ${why || 'aucune'})` : ''}`));
+      c.close();
+    },
+  });
+  return new Response(body, { headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8', ...diag(model, tries) } });
+}
 
 // Qui appelle ? On demande à Supabase Auth de valider le jeton de session envoyé par l'app.
 async function callerId(req: Request): Promise<string | null> {
@@ -122,50 +177,72 @@ Deno.serve(async (req) => {
       }
     }
 
-    const payload = JSON.stringify({
+    // Les modèles récents « réfléchissent » avant de répondre : on garde de la marge pour ne pas couper la réponse.
+    // format: 'json' (accueil d'un nouvel utilisateur) : Gemini renvoie un objet JSON pur, plus fiable à lire pour l'app,
+    // avec moins de « créativité » (questions simples : évite les mots inventés comme « que tu ne peaufines pas »).
+    // reflexion: 'courte' (question simple, sans changement à faire) : Gemini réfléchit moins longtemps, donc répond plus vite.
+    // Si le modèle refuse ce réglage, on le retire et on réessaie (voir plus bas).
+    let short = body.reflexion === 'courte';
+    const payload = () => JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents,
-      // Les modèles récents « réfléchissent » avant de répondre : on garde de la marge pour ne pas couper la réponse.
-      // format: 'json' (accueil d'un nouvel utilisateur) : Gemini renvoie un objet JSON pur, plus fiable à lire pour l'app,
-      // avec moins de « créativité » (questions simples : évite les mots inventés comme « que tu ne peaufines pas »).
-      generationConfig: body.format === 'json'
-        ? { temperature: 0.3, maxOutputTokens: 2048, responseMimeType: 'application/json' }
-        : { temperature: 0.6, maxOutputTokens: 2048 },
+      generationConfig: {
+        ...(body.format === 'json'
+          ? { temperature: 0.3, maxOutputTokens: 4096, responseMimeType: 'application/json' }
+          : { temperature: 0.6, maxOutputTokens: 4096 }),
+        ...(short ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
+      },
     });
+    // stream: true : la réponse est envoyée au fur et à mesure (texte brut), l'app l'affiche pendant qu'elle s'écrit.
+    // Une ancienne version de l'app n'envoie pas stream : elle reçoit toujours { text } comme avant.
+    const stream = body.stream === true;
 
-    let text: string | undefined;
     const errors: string[] = []; // l'erreur de CHAQUE modèle, pour savoir si c'est une surcharge, la clé ou un nom de modèle
     // Supabase coupe une fonction après ~150 s : quand Google est lent, on s'arrête avant pour renvoyer un vrai message.
     const started = Date.now();
-    outer:
     for (const model of MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
         const left = 110000 - (Date.now() - started);
-        if (left < 5000) { errors.push('Google met trop de temps à répondre (surcharge)'); break outer; }
+        if (left < 5000) { errors.push('Google met trop de temps à répondre (surcharge)'); throw new Error(errors.join(' | ')); }
+        // Délai pour RECEVOIR LE DÉBUT de la réponse ; une fois qu'elle arrive, on la laisse finir (jusqu'à ~140 s au total).
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), Math.min(left, 50000));
         let r: Response;
         try {
           r = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, signal: AbortSignal.timeout(Math.min(left, 50000)) },
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:${stream ? 'streamGenerateContent?alt=sse&' : 'generateContent?'}key=${key}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload(), signal: ctrl.signal },
           );
         } catch {
+          clearTimeout(timer);
           errors.push(`${model} : délai dépassé`);
           break; // modèle suivant
         }
-        const j = await r.json().catch(() => ({}));
-        const parts = j?.candidates?.[0]?.content?.parts ?? [];
-        text = parts.map((p: { text?: string }) => p.text ?? '').join('').trim();
-        if (text) break outer;
-        const err = `${model} [${r.status}] ${String(j?.error?.message ?? 'réponse vide').slice(0, 160)}`;
+        let err: string;
+        if (r.ok && stream) {
+          // On attend le premier morceau de texte AVANT de répondre à l'app : si ce modèle échoue, on peut encore passer au suivant.
+          const res = await startStream(r, ctrl, timer, started, model, errors, body.debug === true);
+          if (res) return res;
+          err = `${model} [${r.status}] réponse vide ou coupée`;
+        } else {
+          const j = await r.json().catch(() => ({}));
+          clearTimeout(timer);
+          const text = (j?.candidates?.[0]?.content?.parts ?? [])
+            .filter((p: { thought?: boolean }) => !p.thought)
+            .map((p: { text?: string }) => p.text ?? '').join('').trim();
+          if (text) return json({ text }, 200, model, errors);
+          err = `${model} [${r.status}] ${String(j?.error?.message ?? 'réponse vide').slice(0, 160)}`;
+        }
+        // Le modèle ne connaît pas le réglage de réflexion : on le retire et on réessaie tout de suite ce modèle.
+        if (short && r.status === 400 && /think/i.test(err)) { short = false; attempt--; continue; }
         // Surcharge ou limite momentanée : on réessaie. Autre erreur (modèle inconnu, requête refusée) : modèle suivant.
         // Quota gratuit épuisé : réessayer ce modèle ne sert à rien (et consomme encore), on passe au suivant.
         if (!(r.status === 429 || r.status >= 500) || /quota/i.test(err)) { errors.push(err); break; }
-        if (attempt === 1) errors.push(err);
+        errors.push(err);
         await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
       }
     }
-    if (!text) throw new Error(errors.join(' | ') || 'Réponse vide');
-    return json({ text });
+    throw new Error(errors.join(' | ') || 'Réponse vide');
   } catch (e) {
     return json({ error: String((e as Error).message ?? e) }, 500);
   }

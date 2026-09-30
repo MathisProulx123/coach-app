@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import { CONFIG } from './config.js';
-import { esc, today, addDays, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight, kgToLb, lbToKg } from './util.js';
+import { esc, today, addDays, daysBetween, fmtDate, round1, avg, resizeImage, weekStartFor, toKg, fromKg, fmtWeight, kgToLb, lbToKg } from './util.js';
 import { parsePlates } from './plates.js';
 import { EXERCISES, MUSCLES, buildProgram, altsFor, searchExercises, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
@@ -8,6 +8,7 @@ import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, e
 import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, TEMPLATES, SLOT_NAMES, ROLE_NAMES } from './meals.js';
 import { ACTIONS_DOC, splitActions, planActions, carbsForCalories } from './actions.js';
 import { COACH_GUIDE } from './knowledge.js';
+import { franciser } from './langue.js';
 import { ESSENTIALS, FIRST_MESSAGE, mergeDraft, missing, onboardPayload, parseReply, mockTurn } from './onboarding.js';
 
 const S = {
@@ -984,12 +985,40 @@ function faq(q) {
 }
 const FAQ_DEFAULT = 'Je peux répondre aux questions sur l’application (exercices, repas, cibles, check-in). Pour un coaching plus personnalisé, il faut activer le coach IA (voir le README, section « Coach IA »). Note ton idée et on l’ajoutera à l’application.';
 
+// Chiffres déjà calculés pour que le coach parle de LA personne (« tu perds 0,6 kg par semaine ») sans refaire les calculs.
+const PACE = { lose: 'perte de 0,5 à 1 % du poids par semaine', gain: 'prise de 0,25 à 0,5 % du poids par semaine', maintain: 'poids stable (±0,5 kg)' };
+function progressSummary() {
+  const cs = S.checkins.filter((c) => c.weight), last = cs.slice(-5);
+  const out = { nombre_de_check_ins: S.checkins.length, premier_check_in: S.checkins[0]?.week_start ?? 'aucun encore', rythme_vise: PACE[S.profile.goal] };
+  if (last.length >= 2) {
+    const weeks = Math.max(1, daysBetween(last[0].week_start, last[last.length - 1].week_start) / 7);
+    const perWeek = (last[last.length - 1].weight - last[0].weight) / weeks;
+    Object.assign(out, {
+      tendance_poids_kg_par_semaine: Math.round(perWeek * 100) / 100,
+      tendance_poids_pourcent_par_semaine: Math.round((perWeek / last[0].weight) * 1000) / 10,
+      tendance_calculee_sur: `${last.length} check-ins (${fmtDate(last[0].week_start)} au ${fmtDate(last[last.length - 1].week_start)})`,
+      variation_totale_kg: round1(cs[cs.length - 1].weight - (S.profile.start_weight ?? cs[0].weight)),
+    });
+  }
+  const recent = S.checkins.slice(-4);
+  if (recent.length) {
+    out.seances_faites_moyenne_pourcent = Math.round(avg(recent.map((c) => c.adherence_training)));
+    out.nutrition_respectee_moyenne_pourcent = Math.round(avg(recent.map((c) => c.adherence_nutrition)));
+  }
+  return out;
+}
+
 function aiContext() {
   const p = S.profile, pl = S.plan, pr = prefs();
-  const mealsFor = (dt) => pl.meal_plan ? computeDay(dayVariant(pl, dt), pl.meal_plan, pr).meals.map((m) => `${SLOT_NAMES[m.slot]}${mealName(m, m.items) ? ` (${mealName(m, m.items)})` : ''} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')}`) : [];
+  // Chaque repas avec ses calories et protéines : le coach peut dire « ton dîner fait ~650 kcal et 45 g de protéines ».
+  const mealsFor = (dt) => pl.meal_plan ? computeDay(dayVariant(pl, dt), pl.meal_plan, pr).meals.map((m) => {
+    const k = Math.round(m.items.reduce((s, i) => s + (i.macros?.k || 0), 0)), pro = Math.round(m.items.reduce((s, i) => s + (i.macros?.p || 0), 0));
+    return `${SLOT_NAMES[m.slot]}${mealName(m, m.items) ? ` (${mealName(m, m.items)})` : ''} : ${m.items.filter((i) => i.g > 0).map((i) => `${qtyText(i)} ${i.food.name}`).join(', ')} — environ ${k} kcal, ${pro} g de protéines`;
+  }) : [];
+  const train = mealsFor('train'), rest = mealsFor('rest');
   return {
     profil: {
-      objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
+      prenom: p.name, objectif: GOALS[p.goal], sexe: p.sex, age: new Date().getFullYear() - p.birth_year, taille_cm: p.height_cm,
       poids_kg: lastWeight(), unite_poids_affichee: wUnit(), jours_entrainement: p.days_per_week, materiel: p.equipment, limitations: p.limitations || '',
       but_entrainement_en_ses_mots: pr.training_goal_text || 'non précisé', type_entrainement: TRAINING_STYLES[pr.training_style],
       objectif_chiffre: goalStatus(profileWithGoal(), lastWeight()) ?? 'aucun poids/date visés fixés',
@@ -998,8 +1027,11 @@ function aiContext() {
       cibles_moyennes_semaine: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau },
       cycle_glucidique: { jour_entrainement: dayVariant(pl, 'train'), jour_repos: dayVariant(pl, 'rest'), note: 'Protéines et lipides identiques les deux types de jour ; seuls glucides et calories varient. La personne choisit le type de jour dans l’onglet Repas.' },
       allergies: pr.allergies, autres_allergies: pr.other_allergies.map(otherAllergyLabel), regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, budget_epicerie: BUDGETS[pr.budget],
-      plan_de_repas_jour_entrainement: mealsFor('train'), plan_de_repas_jour_repos: mealsFor('rest'),
+      plan_de_repas_jour_entrainement: train,
+      // Jour de repos : seulement les repas qui changent (moins de glucides), pour envoyer moins de texte.
+      plan_de_repas_jour_repos: rest.every((m, i) => m === train[i]) ? 'identique au jour d’entraînement' : rest.filter((m, i) => m !== train[i]),
     },
+    suivi: progressSummary(),
     programme: pl.program.map((d) => ({ jour: d.label, exercices: d.exercises.map((e) => defOf(e).name) })),
     guide_application_supplementaire: 'Onglet Séance > « Modifier mon programme » : on peut ajouter, renommer, déplacer ou supprimer un jour, ajouter/retirer/déplacer des exercices, changer les séries et répétitions, et créer un exercice personnalisé (nom, type charge/poids du corps/durée, consigne, lien vidéo). Onglet Repas > le bouton ↔ propose aussi une recherche libre d’aliment (marques précises). Réglages : unité de poids kg/lb.',
     semaine_legere: !!pl.deload,
@@ -1031,7 +1063,7 @@ function vCoach() {
       : 'Mode simple : je réponds aux questions sur l’application. Le coach IA complet n’est pas encore activé (voir le README, section « Coach IA »).'}</p>
     <div class="chat">
       ${hist.length ? hist.map((m, i) => `<div class="bubble ${m.r}">${esc(m.t).replace(/\n/g, '<br>')}</div>${m.actions ? actionCardHtml(m, i, i === lastApplied(hist)) : ''}`).join('') : '<p class="muted">Pose ta première question ou choisis une suggestion.</p>'}
-      ${S.chatBusy ? '<div class="bubble ai">…</div>' : ''}
+      ${S.chatBusy ? `<div class="bubble ai" id="chat-stream">${S.chatPartial ? streamHtml(S.chatPartial) : '…'}</div>` : ''}
     </div>
     <div class="chips">
       ${canAI() ? '<button type="button" class="ghost small" data-act="buildDiet">🍽️ Construire mon régime avec le coach</button>' : ''}
@@ -1064,6 +1096,8 @@ function chatContext(hist = []) {
   const pl = S.plan, eq = S.profile.equipment;
   return {
     ...aiContext(),
+    programme: undefined, // déjà dans programme_detaille (avec séries et répétitions)
+    premier_message_de_la_conversation: hist.filter((m) => m.r === 'user').length <= 1,
     guide_du_coach: COACH_GUIDE,
     aliments_de_l_app: !topics.food ? '(non envoyé : la question ne porte pas sur l’alimentation)' : Object.fromEntries(Object.entries(ROLE_NAMES).map(([r, label]) => [label, FOODS.filter((f) => f.role === r).map((f) => `${f.name} (${f.per100.k} kcal, ${f.per100.p} g prot. / 100 g)`).join(' ; ')])),
     modeles_de_repas_de_l_app: TEMPLATES.map((t) => `${{ dej: 'déjeuner', din: 'dîner ou souper', col: 'collation' }[t.slots[0]]} : ${t.label}`),
@@ -1155,6 +1189,12 @@ acts.undoActions = async (el) => {
   } catch (e) { toast(e.message); }
 };
 
+// Réponse en cours d'écriture : on n'affiche pas le bloc d'actions (il devient la carte « Changements proposés » à la fin).
+const streamHtml = (t) => esc(franciser(t.split('```')[0].trim() || '…')).replace(/\n/g, '<br>');
+// Demande de changement (ou « oui » à une suggestion) : le coach doit bien réfléchir pour écrire un bloc d'actions valide.
+// Sinon (question, conseil) : réflexion courte, donc réponse plus rapide.
+const CHANGE_WORDS = /remplac|chang|ajout|enleve|retir|monte|baisse|augment|diminu|modifi|\bmets?\b|compos|refai|remet|passe[rz]? a|unite|cible|calori|annul|\boui\b|\bok\b|d.accord|vas-y|parfait|\bgo\b|fais-le|applique/;
+
 async function ask(q, photos = []) {
   const hist = chatLoad();
   hist.push({ r: 'user', t: q });
@@ -1170,17 +1210,23 @@ async function ask(q, photos = []) {
     const messages = hist.slice(-12).map((m) => ({ role: m.r === 'user' ? 'user' : 'model', text: chatText(m) }));
     // Rappel invisible pour la personne : sans lui, le coach retombe dans ses anciennes consignes (« va dans l'onglet… »).
     messages[messages.length - 1].text += '\n\n(Rappel pour le coach : si je demande un changement faisable avec actions_possibles, propose-le toi-même avec le bloc ```actions```, au lieu de m’expliquer où toucher.)';
-    const payload = { messages, context: chatContext(hist), photos };
+    const payload = { messages, context: chatContext(hist), photos, ...(photos.length || CHANGE_WORDS.test(norm(q)) ? {} : { reflexion: 'courte' }) };
+    // Affiche la réponse pendant qu'elle s'écrit (sans tout redessiner : seulement la bulle en cours).
+    const onText = (t) => {
+      S.chatPartial = t;
+      const el = document.getElementById('chat-stream');
+      if (el) el.innerHTML = streamHtml(t);
+    };
     const quota = (e) => /exceeded your current quota/i.test(e.message); // quota gratuit Gemini du jour épuisé
     const limited = (e) => quota(e) || /limite quotidienne/i.test(e.message); // inutile de réessayer
     const transient = (e) => !limited(e) && /high demand|overload|unavailable|\[(429|500|503)\]/i.test(e.message);
     try {
       try {
-        text = await db.askCoach(payload);
+        text = await db.askCoachStream(payload, onText);
       } catch (e) {
         if (!transient(e)) throw e;
         await new Promise((r) => setTimeout(r, 3000)); // Google est parfois surchargé : on réessaie une fois
-        text = await db.askCoach(payload);
+        text = await db.askCoachStream(payload, onText);
       }
       // Toutes ses propositions sont refusées par l'app (ex. exercice déjà dans la séance) : on lui renvoie les raisons
       // une fois, pour qu'il propose autre chose plutôt que de laisser la personne devant « Impossible ».
@@ -1189,7 +1235,7 @@ async function ask(q, photos = []) {
       if (check && !check.valid) {
         const why = check.items.map((i) => i.label).join(' ; ');
         try {
-          text = await db.askCoach({ ...payload, photos: [], messages: [...messages, { role: 'model', text }, { role: 'user', text: `(Message de l'application, pas de la personne : ta proposition a été refusée — ${why}. Propose une autre option valide, en te basant sur programme_detaille et exercices_disponibles, avec un nouveau bloc actions. Ne mentionne pas ce refus.)` }] });
+          text = await db.askCoach({ ...payload, reflexion: undefined, photos: [], messages: [...messages, { role: 'model', text }, { role: 'user', text: `(Message de l'application, pas de la personne : ta proposition a été refusée — ${why}. Propose une autre option valide, en te basant sur programme_detaille et exercices_disponibles, avec un nouveau bloc actions. Ne mentionne pas ce refus.)` }] });
         } catch { /* on garde la première réponse, la carte expliquera pourquoi c'est impossible */ }
       }
     } catch (e) {
@@ -1207,6 +1253,7 @@ async function ask(q, photos = []) {
   hist.push(msg);
   chatSave(hist);
   S.chatBusy = false;
+  S.chatPartial = '';
   render();
   window.scrollTo(0, document.body.scrollHeight);
 }

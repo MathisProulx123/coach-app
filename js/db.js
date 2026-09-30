@@ -218,6 +218,57 @@ export async function askCoach(payload) {
   return data.text;
 }
 
+const END = '␞'; // signal de fin de la réponse en flux (voir la fonction coach-ai)
+// Même chose, mais la réponse s'affiche pendant qu'elle s'écrit : onText(texte reçu jusqu'ici) à chaque morceau.
+// Une ancienne fonction coach-ai (sans stream) renvoie { text } d'un coup : ça marche aussi.
+export async function askCoachStream(payload, onText) {
+  if (DEMO) return askCoach(payload);
+  const ctrl = new AbortController();
+  const slow = 'Le coach IA met trop de temps à répondre (Google est surchargé). Réessaie dans quelques minutes.';
+  // Délai pour le DÉBUT de la réponse (90 s) ; ensuite, la fonction elle-même s'arrête avant 150 s.
+  let timer = setTimeout(() => ctrl.abort(), 90000);
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/${CONFIG.AI_FUNCTION}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: `Bearer ${session?.access_token ?? CONFIG.SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ ...payload, stream: true }),
+      signal: ctrl.signal,
+    });
+    if (!r.ok || /json/.test(r.headers.get('Content-Type') || '')) {
+      const raw = await r.text();
+      let j = null;
+      try { j = JSON.parse(raw); } catch { /* texte brut */ }
+      if (r.ok && j?.text) return j.text;
+      throw new Error(`[${r.status}] ${j?.error || j?.message || j?.msg || raw || 'Réponse vide du coach IA'}`);
+    }
+    clearTimeout(timer);
+    timer = setTimeout(() => ctrl.abort(), 150000);
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let text = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += dec.decode(value, { stream: true });
+        onText(text.split(END)[0]);
+      }
+    } catch { /* coupure réseau : traitée comme une réponse incomplète ci-dessous */ }
+    // La fonction termine par « ␞FIN:STOP » quand la réponse est complète. Sinon (coupée), on redemande la réponse
+    // d'un coup, sans flux : mieux vaut attendre un peu que d'afficher une réponse à moitié écrite.
+    const [body, fin = ''] = text.split(END);
+    if (!fin.startsWith('FIN:STOP') || !body.trim()) {
+      clearTimeout(timer);
+      return askCoach(payload);
+    }
+    return body.trim();
+  } catch (e) {
+    throw e.name === 'AbortError' ? new Error(slow) : e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------- Recherche d'aliments (Open Food Facts, via une fonction Supabase pour rester fiable) ----------
 export async function searchFoods(query) {
   if (DEMO) {
