@@ -36,7 +36,7 @@ La clé « anon » est faite pour être publique. La sécurité vient des règle
 
 **Usage privé (à deux)** : créez vos comptes, puis **Authentication → Sign In / Providers → désactivez « Allow new users to sign up »**.
 
-**Produit ouvert au public** (d'abord `migration_004.sql` à `migration_006.sql`, voir plus bas) :
+**Produit ouvert au public** (d'abord `migration_004.sql` à `migration_007.sql`, voir plus bas) :
 1. **Authentication → Sign In / Providers → Email** : laisse « Allow new users to sign up » et active **Confirm email**.
 2. **Authentication → URL Configuration** : **Site URL** = l'adresse de l'app (ex. `https://TON-NOM.github.io/NOM-DU-DEPOT/`) ; dans **Redirect URLs**, ajoute la même adresse suivie de `**`. Les liens des courriels (confirmation, mot de passe oublié) ramènent à cette adresse.
 3. **Courriels** : l'envoi intégré de Supabase est limité à quelques courriels par heure et, sur un nouveau projet, seulement aux adresses de ton équipe Supabase. Pour de vrais clients, branche un service d'envoi (**Authentication → Emails → SMTP Settings**, ex. Resend ou Brevo, qui ont une offre gratuite).
@@ -63,7 +63,7 @@ Si Google change le nom du modèle gratuit, ajoute un secret `GEMINI_MODEL` avec
 
 ## Mise à jour de la base (migration)
 
-Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql` à `migration_006.sql`, dans l'ordre), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).
+Quand une nouvelle version de l'app ajoute des champs (ex. `supabase/migration_002.sql` à `migration_007.sql`, dans l'ordre), colle le fichier dans **SQL Editor → Run** **avant** de mettre l'app en ligne. Il ne touche pas à tes données. Après une migration, redéploie aussi la fonction `coach-ai` si son code a changé (**Edge Functions → coach-ai → Code**, colle le nouveau contenu de `supabase/functions/coach-ai/index.ts`, **Deploy**).
 
 ## Comptes privés et amis (migration_004)
 
@@ -122,6 +122,10 @@ Attention : changer les jours par semaine ou le matériel dans les Réglages rec
 ## Le plan de repas
 
 Dans l'onglet **Repas**, l'app pose d'abord tes allergies, ton régime et ce que tu n'aimes pas, puis crée de vrais repas (aliments, quantités, marques) qui atteignent tes cibles de calories, protéines, glucides et lipides. Tu peux échanger un aliment (↔), refaire un repas, modifier tes cibles à la main ou voir la liste d'épicerie de la semaine. Les quantités se recalculent automatiquement quand le coach change tes calories.
+
+**3 menus qui alternent** : chaque jour, l'app sert le menu suivant (1, 2, 3, 1…), avec des viandes et des féculents différents d'un menu à l'autre ; des onglets permettent de voir les autres menus. Un plan créé avant cette version garde son menu (menu 1) et propose « Ajouter 2 menus ». La liste d'épicerie additionne les menus des 7 prochains jours, classée par rayon (riz et pâtes en poids sec). Sous chaque repas, « Comment le préparer » donne une mini-recette.
+
+**Cocher « Mangé »** sur les repas du jour remplit tout seul le journal (calories et protéines). Demande `supabase/migration_007.sql` (ajoute une colonne au journal, sans toucher aux données).
 
 Les repas suivent **29 modèles** comme en mangent les gens au Québec (gruau au lait, smoothie, céréales, sandwich, pâté chinois, bols, assiettes, wraps, chili, sautés, collations…), avec **88 aliments** d'une épicerie du Québec. Les repas sont composés d'office avec les aliments que la plupart des gens achètent (poulet, bœuf, porc, riz, pâtes, patates, légumes et fruits courants) ; les autres (poissons, tofu, légumineuses, quinoa…) restent offerts avec le bouton ↔ (et servent de base aux végétariens). Les valeurs nutritives viennent du Fichier canadien sur les éléments nutritifs (Santé Canada) ; les marques sont des exemples : vérifie l'étiquette de ta marque. Avec un budget « serré », les repas évitent les aliments les plus chers. Pour ajouter un aliment : une ligne dans `js/foods.js` ; pour un modèle de repas : `TEMPLATES` dans `js/meals.js`.
 

@@ -201,20 +201,54 @@ function dayError(T, choices, prefs) {
 
 // Choisit les aliments de chaque repas en respectant allergies, régime et aliments non aimés.
 // Avec des cibles, on essaie 40 combinaisons et on garde celle qui colle le mieux.
-export function buildChoices(prefs, seed = Date.now(), targets = null) {
-  if (!targets) return pickChoices(prefs, seed);
+// avoid / avoidFoods : modèles de repas et aliments déjà servis dans un autre menu (on en prend d'autres si possible,
+// pour varier : du bœuf ou du porc si l'autre menu est au poulet).
+function buildMenu(prefs, seed, targets = null, avoid = new Set(), avoidFoods = new Set()) {
+  if (!targets) return pickChoices(prefs, seed, avoid, avoidFoods);
   let best = null, bestErr = Infinity;
   for (let i = 0; i < 40; i++) {
-    const c = pickChoices(prefs, seed + i * 104729);
+    const c = pickChoices(prefs, seed + i * 104729, avoid, avoidFoods);
     const e = dayError(targets, c, prefs);
     if (e < bestErr) { bestErr = e; best = c; }
   }
   return best;
 }
 
-function pickChoices(prefs, seed) {
+// ---------- Plusieurs menus qui alternent ----------
+// Un plan de repas = le menu 1 ({ seed, meals }, comme avant) + les autres menus dans « alt ». Une ancienne version
+// de l'app ne lit que le menu 1 : elle continue de marcher. Chaque jour, on sert le menu suivant (1, 2, 3, 1…).
+export const MENUS = 3;
+export const menusOf = (mp) => (mp?.meals ? [{ seed: mp.seed, meals: mp.meals }, ...(mp.alt || [])] : []);
+export const menuIndexFor = (dateStr, n) => (n > 1 ? Math.round((Date.parse(dateStr) - Date.parse('2024-01-01')) / 864e5) % n : 0);
+// Remplace le menu i par menu ({ seed, meals }) dans le plan.
+export function setMenu(mp, i, menu) {
+  if (i === 0) return { ...mp, seed: menu.seed, meals: menu.meals };
+  return { ...mp, alt: (mp.alt || []).map((m, j) => (j === i - 1 ? { seed: menu.seed, meals: menu.meals } : m)) };
+}
+// Ajoute des menus à un plan (le menu 1 ne change pas), avec d'autres modèles de repas que ceux déjà servis.
+export function addMenus(mp, prefs, targets = null, n = MENUS) {
+  const menus = menusOf(mp);
+  const avoid = new Set(menus.flatMap((m) => m.meals.map((x) => x.tpl).filter(Boolean)));
+  const foodsOf = (m) => m.meals.flatMap((x) => x.items.filter((it) => it.role === 'protein' || it.role === 'carb').map((it) => it.food));
+  const avoidFoods = new Set(menus.flatMap(foodsOf));
+  const alt = [...(mp.alt || [])];
+  for (let i = menus.length; i < n; i++) {
+    const m = buildMenu(prefs, Date.now() + i * 31337, targets, avoid, avoidFoods);
+    m.meals.forEach((x) => x.tpl && avoid.add(x.tpl));
+    foodsOf(m).forEach((f) => avoidFoods.add(f));
+    alt.push({ seed: m.seed, meals: m.meals });
+  }
+  return { ...mp, alt };
+}
+// Nouveau plan complet : MENUS menus différents.
+export function buildChoices(prefs, seed = Date.now(), targets = null, n = MENUS) {
+  const first = buildMenu(prefs, seed, targets);
+  return n > 1 ? addMenus(first, prefs, targets, n) : first;
+}
+
+function pickChoices(prefs, seed, avoid = new Set(), avoidFoods = new Set()) {
   const rand = rng(seed);
-  const used = new Set(), usedTpl = new Set();
+  const used = new Set(avoidFoods), usedTpl = new Set(avoid);
   const meals = (MEAL_LAYOUT[prefs.meals] || MEAL_LAYOUT[4]).map(([slot]) => pickFromTemplate(slot, prefs, rand, used, usedTpl) || ({
     slot,
     items: ROLES[slot].map((role) => {
@@ -548,7 +582,7 @@ export function groceryList(days) {
   }
   const line = ({ food, g }) => {
     if (food.liquid) return { name: food.name, text: `${String(Math.round(g / 250) / 4).replace('.', ',')} L`, brands: food.brands };
-    if (food.id === 'avocat') { const n = Math.ceil(g / 150); return { name: food.name, text: `${n} avocat${n > 1 ? 's' : ''}`, brands: food.brands }; }
+    if (food.id === 'avocat') { const n = Math.ceil(g / 150); return { name: '', text: `${n} avocat${n > 1 ? 's' : ''}`, brands: food.brands }; }
     if (food.unit && food.unit.whole && food.unit.g > 5) {
       // « 14 oranges », « 35 Œufs entiers », « 21 tranches Pain de blé entier » : sans répéter le même mot deux fois.
       const n = Math.round(g / food.unit.g), unitTxt = n > 1 ? food.unit.p : food.unit.n;

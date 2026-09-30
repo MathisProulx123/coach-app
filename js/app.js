@@ -5,7 +5,7 @@ import { parsePlates } from './plates.js';
 import { EXERCISES, MUSCLES, buildProgram, altsFor, searchExercises, imgUrl, imgFallback } from './data.js';
 import { calcTargets, weeklyAdjust, nextTarget, extraTargets, dayVariant, goalStatus, bmr } from './rules.js';
 import { ALLERGENS, ALLERGEN_WORDS, DIETS, EXTRA_ALLERGIES, otherAllergyLabel, externalFood, FOODS } from './foods.js';
-import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, mealRecipe, TEMPLATES, SLOT_NAMES, ROLE_NAMES } from './meals.js';
+import { buildChoices, rerollMeal, equivalents, swapItem, swapItemCustom, computeDay, qtyText, groceryList, mealName, mealRecipe, TEMPLATES, SLOT_NAMES, ROLE_NAMES, menusOf, menuIndexFor, setMenu, addMenus } from './meals.js';
 import { ACTIONS_DOC, splitActions, planActions, carbsForCalories } from './actions.js';
 import { COACH_GUIDE } from './knowledge.js';
 import { franciser } from './langue.js';
@@ -176,6 +176,20 @@ function lastWeight() {
 function todayLog() { return S.daily.find((d) => d.date === today()) || {}; }
 // Cibles du jour selon qu'aujourd'hui est un jour d'entraînement ou de repos (choix mémorisé dans le journal du jour).
 function curDayTargets() { return dayVariant(S.plan, todayLog().day_type === 'rest' ? 'rest' : 'train'); }
+// Menus qui alternent (voir meals.js) : celui d'aujourd'hui, et celui qu'on regarde dans l'onglet Repas.
+const todayMenuIdx = () => menuIndexFor(today(), menusOf(S.plan.meal_plan).length);
+function viewMenuIdx() {
+  const i = S.menuIdx ?? todayMenuIdx();
+  return i < menusOf(S.plan.meal_plan).length ? i : 0;
+}
+const viewMenu = () => menusOf(S.plan.meal_plan)[viewMenuIdx()];
+const saveViewMenu = (menu) => savePlan({ meal_plan: setMenu(S.plan.meal_plan, viewMenuIdx(), menu) });
+// Calories et protéines des repas cochés « Mangé » (menu du jour, selon le type de jour).
+function eatenTotals(eaten, dayType) {
+  const cd = computeDay(dayVariant(S.plan, dayType === 'rest' ? 'rest' : 'train'), menusOf(S.plan.meal_plan)[todayMenuIdx()], prefs());
+  const ms = cd.meals.filter((m) => eaten.includes(m.slot));
+  return { calories: Math.round(ms.reduce((t, m) => t + m.totals.k, 0)), protein: Math.round(ms.reduce((t, m) => t + m.totals.p, 0)) };
+}
 function statsOf(d) {
   const first = d.checkins[0]?.weight ?? d.profile.start_weight;
   const last = d.checkins[d.checkins.length - 1]?.weight ?? first;
@@ -700,7 +714,9 @@ function vFood() {
   if (S.editPrefs) return foodPrefsForm(pr, false);
   const dayType = log.day_type === 'rest' ? 'rest' : 'train'; // par défaut : jour d'entraînement
   const dayT = dayVariant(pl, dayType);
-  const cd = computeDay(dayT, pl.meal_plan, pr);
+  const menus = menusOf(pl.meal_plan), vi = viewMenuIdx(), ti = todayMenuIdx();
+  const cd = computeDay(dayT, menus[vi], pr);
+  const eaten = vi === ti ? (log.eaten || []) : null; // on coche seulement le menu d'aujourd'hui
   const ex = extraTargets(dayT.calories, lastWeight());
   const week = S.daily.filter((d) => d.date >= addDays(today(), -6));
   const wAvg = avg(week.filter((d) => d.calories).map((d) => d.calories));
@@ -736,10 +752,17 @@ function vFood() {
     <p>Pour atteindre ${dayT.calories} kcal, il a fallu ajouter un aliment en plus à un repas et les portions sont à l’étroit. Avec 6 repas (dont 3 collations), elles seraient plus normales.</p>
     <button type="button" class="block" data-act="moreMeals">Passer à 6 repas</button>
   </section>` : ''}
+  ${menus.length > 1 ? `<div class="tabs menus">${menus.map((_, i) => `<button type="button" class="${i === vi ? 'on' : ''}" data-act="pickMenu" data-arg="${i}">Menu ${i + 1}${i === ti ? ' · aujourd’hui' : ''}</button>`).join('')}</div>
+  <p class="muted">Tes ${menus.length} menus alternent d’un jour à l’autre${vi === ti ? '.' : ` : celui-ci revient un autre jour.`}</p>` : pl.meal_plan ? `<section class="card">
+    <h2>🔁 Plus de variété</h2>
+    <p class="muted">Ajoute 2 autres menus qui alternent avec celui-ci d’un jour à l’autre. Ton menu actuel ne change pas.</p>
+    <button type="button" class="ghost block" data-act="addVariety">Ajouter 2 menus</button>
+  </section>` : ''}
   <p class="muted">Quantités en aliments cuits, sauf indication. Les marques sont des exemples courants et les valeurs sont des moyennes : vérifie l’étiquette de ta marque.</p>
   ${cd.meals.map((m, si) => `
     <section class="card">
       <div class="row between"><h2>${SLOT_NAMES[m.slot]}</h2><span class="muted">${m1(m.totals.k)} kcal · ${m1(m.totals.p)} g prot.</span></div>
+      ${eaten ? `<button type="button" class="small eat ${eaten.includes(m.slot) ? '' : 'ghost'}" data-act="toggleEaten" data-arg="${m.slot}" aria-pressed="${eaten.includes(m.slot)}">${eaten.includes(m.slot) ? '✓ Mangé' : 'Marquer comme mangé'}</button>` : ''}
       ${mealName(m, m.items) ? `<p class="meal-name">${esc(mealName(m, m.items))}</p>` : ''}
       ${mealRecipe(m) ? `<details class="recipe"><summary>Comment le préparer</summary><p class="muted">${esc(mealRecipe(m))}</p></details>` : ''}
       ${m.items.map((it, ii) => it.g <= 0 ? '' : `
@@ -768,15 +791,34 @@ function vFood() {
   <form data-form="daily" class="card">
     <h2>Journal du jour</h2>
     <label>Poids du matin (${wUnit()}) — optionnel</label><input name="weight" type="number" step="0.1" inputmode="decimal" value="${log.weight != null ? fmtWeight(log.weight, wUnit()) : ''}">
+    ${log.eaten?.length ? `<p class="muted">Rempli avec tes repas cochés « Mangé » (${log.eaten.length}). Corrige au besoin.</p>` : ''}
     <label>Calories mangées</label><input name="calories" type="number" inputmode="numeric" value="${log.calories ?? ''}">
     <label>Protéines (g)</label><input name="protein" type="number" inputmode="numeric" value="${log.protein ?? ''}">
     <button class="block" style="margin-top:12px">Enregistrer</button>
     ${wAvg ? `<p class="muted">Moyenne des 7 derniers jours : ${Math.round(wAvg)} kcal (cible ${dayT.calories}).</p>` : ''}
   </form>`;
 }
-acts.setDayType = async (el) => {
+acts.pickMenu = (el) => { S.menuIdx = +el.dataset.arg; render(); };
+acts.addVariety = async () => {
   try {
-    await db.saveDaily({ user_id: S.me.id, date: today(), day_type: el.dataset.arg });
+    await savePlan({ meal_plan: addMenus(S.plan.meal_plan, prefs(), S.plan) });
+    toast('2 menus ajoutés : ils alternent d’un jour à l’autre');
+    await refresh();
+  } catch (e) { toast(e.message); }
+};
+acts.toggleEaten = async (el) => {
+  const log = todayLog(), slot = el.dataset.arg;
+  const eaten = (log.eaten || []).includes(slot) ? log.eaten.filter((x) => x !== slot) : [...(log.eaten || []), slot];
+  try {
+    await db.saveDaily({ user_id: S.me.id, date: today(), eaten, ...eatenTotals(eaten, log.day_type) });
+    await refresh();
+  } catch (e) { toast(/eaten/.test(e.message) ? 'Mise à jour de la base nécessaire (migration_007.sql, voir README).' : e.message); }
+};
+acts.setDayType = async (el) => {
+  const eaten = todayLog().eaten || [];
+  try {
+    // Le type de jour change les quantités : on recalcule aussi ce qui est déjà coché « Mangé ».
+    await db.saveDaily({ user_id: S.me.id, date: today(), day_type: el.dataset.arg, ...(eaten.length ? eatenTotals(eaten, el.dataset.arg) : {}) });
     await refresh();
   } catch (e) { toast(e.message); }
 };
@@ -786,12 +828,13 @@ acts.cancelPrefs = () => { S.editPrefs = false; render(); };
 acts.swapFood = (el) => {
   const si = +el.dataset.slot, ii = +el.dataset.item;
   const pl = S.plan, pr = prefs();
-  const it = pl.meal_plan.meals[si].items[ii];
-  const cur = computeDay(curDayTargets(), pl.meal_plan, pr).meals[si].items[ii];
-  const eq = equivalents(pl.meal_plan, si, ii, pr);
+  const menu = viewMenu();
+  const it = menu.meals[si].items[ii];
+  const cur = computeDay(curDayTargets(), menu, pr).meals[si].items[ii];
+  const eq = equivalents(menu, si, ii, pr);
   openSheet(`
     <div class="row between"><h2>Remplacer</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <p class="muted">${ROLE_NAMES[it.role]} du ${SLOT_NAMES[pl.meal_plan.meals[si].slot].toLowerCase()} : <b>${esc(cur.food.name)}</b>. La quantité et le reste du repas se recalculent automatiquement.</p>
+    <p class="muted">${ROLE_NAMES[it.role]} du ${SLOT_NAMES[menu.meals[si].slot].toLowerCase()} : <b>${esc(cur.food.name)}</b>. La quantité et le reste du repas se recalculent automatiquement.</p>
     ${eq.length ? eq.map((f) => `
       <div class="alt">
         <div style="flex:1"><b>${esc(f.name)}</b><div class="muted">Marques : ${esc(f.brands)}</div></div>
@@ -804,7 +847,7 @@ acts.swapFood = (el) => {
 };
 acts.pickFood = async (el) => {
   try {
-    await savePlan({ meal_plan: swapItem(S.plan.meal_plan, +el.dataset.slot, +el.dataset.item, el.dataset.food) });
+    await saveViewMenu(swapItem(viewMenu(), +el.dataset.slot, +el.dataset.item, el.dataset.food));
     closeSheet();
     await refresh();
   } catch (e) { toast(e.message); }
@@ -836,7 +879,7 @@ acts.pickCustomFood = async (el) => {
   const d = el.dataset;
   const food = externalFood({ id: d.id, name: d.name, brands: d.brands, k: +d.k, p: +d.p, c: +d.c, f: +d.f });
   try {
-    await savePlan({ meal_plan: swapItemCustom(S.plan.meal_plan, +d.slot, +d.item, food) });
+    await saveViewMenu(swapItemCustom(viewMenu(), +d.slot, +d.item, food));
     closeSheet();
     toast(`${food.name} ajouté à ton plan`);
     await refresh();
@@ -862,16 +905,19 @@ acts.moreMeals = async () => {
 };
 acts.reroll = async (el) => {
   try {
-    await savePlan({ meal_plan: rerollMeal(S.plan.meal_plan, +el.dataset.slot, prefs(), curDayTargets()) });
+    await saveViewMenu(rerollMeal(viewMenu(), +el.dataset.slot, prefs(), curDayTargets()));
     await refresh();
   } catch (e) { toast(e.message); }
 };
 acts.grocery = () => {
-  const list = groceryList([[computeDay(curDayTargets(), S.plan.meal_plan, prefs()), 7]]);
+  // Les 7 prochains jours : chaque menu compte pour le nombre de jours où il revient.
+  const menus = menusOf(S.plan.meal_plan);
+  const days = menus.map((m, i) => [computeDay(curDayTargets(), m, prefs()), [0, 1, 2, 3, 4, 5, 6].filter((d) => menuIndexFor(addDays(today(), d), menus.length) === i).length]);
+  const list = groceryList(days.filter(([, n]) => n > 0));
   const aisles = [...new Set(list.map((g) => g.aisle))];
   openSheet(`
     <div class="row between"><h2>Épicerie (7 jours)</h2><button class="ghost small" data-act="closeSheet">Fermer</button></div>
-    <p class="muted">Quantités pour une semaine de ton plan actuel (jour d’entraînement), classées par rayon. Riz et pâtes en poids sec ; viandes en poids cuit (compte environ 25 % de plus à l’achat, cru).</p>
+    <p class="muted">Quantités pour les 7 prochains jours${menus.length > 1 ? ` (tes ${menus.length} menus)` : ''}, jours d’entraînement, classées par rayon. Riz et pâtes en poids sec ; viandes en poids cuit (compte environ 25 % de plus à l’achat, cru).</p>
     ${aisles.map((a) => `<h3>${esc(a)}</h3>${list.filter((g) => g.aisle === a).map((g) => `<div class="food"><div style="flex:1"><b>${esc(g.text)}</b> ${esc(g.name)}<div class="muted">Marques : ${esc(g.brands)}</div></div></div>`).join('')}`).join('')}`);
 };
 acts.editTargets = () => {
@@ -1096,6 +1142,7 @@ function aiContext() {
       cibles_moyennes_semaine: { kcal: pl.calories, proteines_g: pl.protein, glucides_g: pl.carbs, lipides_g: pl.fat, eau_litres: pr.water ?? extraTargets(pl.calories, lastWeight()).eau },
       cycle_glucidique: { jour_entrainement: dayVariant(pl, 'train'), jour_repos: dayVariant(pl, 'rest'), note: 'Protéines et lipides identiques les deux types de jour ; seuls glucides et calories varient. La personne choisit le type de jour dans l’onglet Repas.' },
       allergies: pr.allergies, autres_allergies: pr.other_allergies.map(otherAllergyLabel), regime: pr.diet, non_aime: pr.dislikes, repas_par_jour: pr.meals, budget_epicerie: BUDGETS[pr.budget],
+      nombre_de_menus: `${menusOf(pl.meal_plan).length || 0} menu(s) qui alternent d'un jour à l'autre ; voici le menu 1 (celui que tes actions sur les repas modifient)`,
       plan_de_repas_jour_entrainement: train,
       // Jour de repos : seulement les repas qui changent (moins de glucides), pour envoyer moins de texte.
       plan_de_repas_jour_repos: rest.every((m, i) => m === train[i]) ? 'identique au jour d’entraînement' : rest.filter((m, i) => m !== train[i]),
