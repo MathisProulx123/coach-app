@@ -87,6 +87,7 @@ const AUTH_FR = [
   [/rate limit|too many requests|security purposes/i, 'Trop d’essais d’affilée. Attends une minute puis réessaie.'],
   [/unable to validate email|invalid email|email address .* is invalid/i, 'Cette adresse courriel n’est pas valide.'],
   [/same.*password|different from the old/i, 'Choisis un mot de passe différent de l’ancien.'],
+  [/error sending .*email/i, 'Le courriel n’a pas pu être envoyé pour le moment. Réessaie dans quelques minutes.'],
 ];
 const authError = (e) => new Error((AUTH_FR.find(([re]) => re.test(e.message)) || [null, e.message])[1]);
 
